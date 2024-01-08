@@ -1,0 +1,77 @@
+
+Notes
+=====
+
+* debug package: a dummy package with an empty implementation.
+
+
+* temp* packages: There are three variations. 
+  temp1 is a basic implementation of temperature conversion, 
+  temp2, and temp3 use an auxiliary debugging module to trace through the execution. 
+  temp4 defines Number as subtype of Integer instead of using a derived type. The integer operators 
+    of the Standard package will be used instead of operators generated for the derived type.
+  The packages exhibit the same package level interaction, but they differ in the interaction 
+  with an imported package, and how they define the type Number.
+
+
+* [no]func_renaming packages/[no]var_renaming packages: 
+  packages with function and variable renaming. IMO, the packages with and without renaming 
+  should return the same result. This works for [no]func_renaming but not for var_renaming.
+
+
+* array_renaming:
+
+
+* complex* packages: Correct values dependant on whether we merge or split out record fields.
+  In complex1 the two routines access different components of type Complex. 
+  Question: How should this be handled in LCOM? i
+  Since it is the purpose of LCOM to identify routines accessing disjoint subsets of fields, 
+  LCOMs sensitive to fields should report this accordingly.
+
+  complex2 and complex3 have the same functionality and IMO should return the same LCOM
+  result. The difference between the versions is that complex2 uses field assignment
+  whereas complex3 uses compound assignment.
+
+
+* internal_packages: a procedure that contains two local sub-packages
+
+
+* raising* packages: a package defining exception(s) and procedures that may throw them. In the ROSE
+  AST, the exceptions are treated as variables with a special type "Exception". It seems that this 
+  representation also works for LCOM.
+
+
+* xsoft/ysoft/zsoft: two versions of keeping track of people and departments. People and departments are
+  represented as variant record. xsoft has a function text_representation that ties
+  together all variants, but even without (ysoft) the two representations are connected through
+  the record's discriminant. zsoft is a version with a similar interface. Its implementation keeps people
+  and departments separated. Higher LCOM results are expected for zsoft.
+
+
+* gcomplex: a generic version of the complex packages that allows users to set the base of complex numbers.
+* complex_int: an instantiation of gcomplex with integer type.
+* point_complex: a procedure that imports complex_int
+
+
+* points: a record type and a derived record type defined in a single package
+
+
+* multivariables: two variables are declared within one declaration, but used independently.
+
+
+* separated: derived from multivariables. Routines accessing varx have been separated from the package body.
+  In addition, a new subunit, procedure xchg, has been added. Xchg is a routine that is not part of the spec. 
+  xchg accesses both variables varx and vary. It is not clear whether xchg shall be considered for LCOM or not.
+  NOTE, similarly to separating routines and adding a new routine as subunit, sub packages can be added and
+  and separated (todo: create test cases).
+
+
+* concurrent: This package defines concurrent abstractions, a circular buffer and a counter. Both abstractions are
+  implemented as protected objects. The two concurrent objects only access their own components.
+  Question: In this example, the types that are introduced at the package level are only used by the buffer. In practice,
+  a type could be used by more than one abstraction. This raises the question whether types should be considered attributes.
+
+
+* body_attribute* packages: tests the behavior of a body attribute being assigned in the initializer
+  (Body_Attribute1) or in the initialization of the attribute itself (Body_Attribute2). 
+  Both should probably yield the same result, as they are effectively equivalent.
