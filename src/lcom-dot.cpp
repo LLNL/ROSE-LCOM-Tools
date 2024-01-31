@@ -18,7 +18,7 @@
 using Method = Traverse::MType;
 using Attribute = Traverse::AType;
 
-static const char* purpose = "lcom tool dot generator";
+static const char* purpose = "LCOM tool DOT generator";
 static const char* description =
     "Generates LCOM DOT graphs for Ada packages in a single project and "
     "saves the output to DOT.";
@@ -202,6 +202,7 @@ struct ANode {
   const ANode* GetNonCluster() const {
     for (const auto& field : fields) {
       // Found a non-cluster.
+      // This is a leaf node because there are no child fields beneath it.
       if (!field.second->fields.size()) return field.second;
       // Recursively search for some non-cluster.
       const ANode* ret = field.second->GetNonCluster();

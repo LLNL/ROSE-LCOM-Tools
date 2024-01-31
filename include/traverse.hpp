@@ -38,6 +38,7 @@ class Attribute;
 template <typename C>
 class CalledMethod;
 
+// Attribute type.
 class AType {
  public:
   using T = SgInitializedName*;
@@ -46,6 +47,8 @@ class AType {
   std::vector<T> ids;
 
  public:
+  // Converts a list of generic SgExpression to the attribute type by getting
+  // its declaration. This is done to properly leverage the type system.
   static std::vector<T> ToAttrList(const std::vector<SgExpression*>& exps) {
     std::vector<T> attrs(exps.size());
     std::transform(exps.cbegin(), exps.cend(), attrs.begin(),
@@ -118,15 +121,22 @@ class AType {
     return false;
   }
   T operator[](std::size_t idx) const { return ids[idx]; }
+  // Get the root ID.
   T GetId() const { return ids[0]; }
   std::vector<T> GetIds() const { return ids; }
 };
 
+
 // Attributes don't use an alias. Instead, they use a custom class.
 // Using AType = std::vector<SgInitializedName*>;
+
+// MType is an alias for SgFunctionDeclaration, which covers functions and
+// procedures.
 using MType = SgFunctionDeclaration*;
+
 // Class don't use an alias. Instead, it is specified using templates.
 // using C = SgAdaPackageSpec*;
+
 
 // NOTE: We use a recursive call for the sake of the type system. Intermediate
 // results may not be the right node type, but the final one always should be.
@@ -223,13 +233,6 @@ static T GetScope(AType n) {
   if (!n.GetId()) LOG(FATAL) << "n.GetId() was null for " << n << std::endl;
   return is<T>(GetScopeRecurse<T>(n.GetId(), n.GetId()));
 }
-template <typename T>
-static T GetParent(const SgNode* n) {
-  LOG(TRACE) << "GetParent: " << NPrint::p(n) << std::endl;
-  if (n == nullptr) return nullptr;
-  if (T t = is<T>(n)) return t;
-  return GetParent<T>(n->get_parent());
-}
 
 // Class, Method, and Attribute objects are all Component types.
 // They are distinguished by the use of node pointers as unique IDs.
@@ -259,6 +262,7 @@ class Class : public Component<C> {
       : Component<C>(t.id), methods(t.methods), sourceFile(t.sourceFile) {}
   Class(C id, boost::filesystem::path sourceFile)
       : Component<C>(id), sourceFile(sourceFile) {}
+  // Generate the LCOMType used in all LCOM analysis.
   LCOMType ToLCOMClass() const {
     LCOMType classLCOM = LCOMType(this->GetId());
     for (const auto& m : methods) {
@@ -291,7 +295,7 @@ class Class : public Component<C> {
                    << NPrint::p(this->GetId()) << std::endl;
         methodLCOM.calledMethods.emplace_back(cmId);
       }
-      if (classLCOM.methods.count(methodLCOM) >= 1) {
+      if (classLCOM.methods.count(methodLCOM) > 0) {
         LOG(TRACE) << methodLCOM << " is already in class " << classLCOM
                    << std::endl;
         continue;
@@ -462,6 +466,7 @@ class IA {
   IA(const IA& X){};
   // IA(const IA& X) : class_(X.class_), Method_(X.method_){};
 
+  // Print out all currently processed class, method, and attribute data.
   friend std::ostream& operator<<(std::ostream& os, const IA<C>& c) {
     for (const auto& c : classData) {
       const auto& classInst = std::get<1>(c);
@@ -513,6 +518,7 @@ class IA {
   }
 };
 
+// Initializers for static IA data structures.
 template <typename C>
 std::map<C, Class<C>> IA<C>::classData = std::map<C, Class<C>>();
 template <typename C>
@@ -612,6 +618,8 @@ T GetBaseRootExp(SgExpression* id) {
 // if (/*Tagged type is first argument*/ false) {
 //   owningClass = owningClass.methodMap[taggedType];
 // }
+// To start this process, we should begin by checking if SgNode is some sort of function. Then we need to find documentation on how to get the argument list for the function and their associated types. If we find that the first argument is a class (a tagged type, more specifically), then we need to get the class ID of that tagged type.
+// It would be helpful; to create a minimum viable example and print a DOT graph of it to see the relationships created.
 template <typename C>
 Class<C>* GetOwningClass(SgNode* n) {
   const C owningClassId = GetScope<C>(n);
