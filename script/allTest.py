@@ -336,7 +336,7 @@ def run_gtests():
     print("Running unit tests")
     tests = run(
         [
-            "/PATH/TO/TESTS/gtest-parallel/gtest-parallel",
+            "/PATH/TO/GTESTS/gtest-parallel/gtest-parallel",
             os.path.join(Config.BUILD_DIR, "lcom-unittest"),
         ],
         cwd=os.path.join(Config.OUT_DIR, "workingDir-gtest"),

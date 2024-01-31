@@ -47,27 +47,77 @@ This graph is analyzed by the tool using the [definitions of LCOM](#lcom-definit
 
 ## Dependencies
 
-- GNAT compiler: https://www.gnu.org/software/gnat/
+- GNAT Community Edition 2019: https://blog.adacore.com/gnat-community-2019-is-here
 - BOOST libraries: https://www.boost.org/
 - ROSE compiler tool: https://github.com/rose-compiler/rose
 
-Build and install [GNAT](https://www.gnu.org/software/gnat/) and [BOOST](https://www.boost.org/), then set the locations of each install location in the running environment so that we can build [ROSE](https://github.com/rose-compiler/rose) and the LCOM Metric Analyzer:
+Install the required dependencies using your package manager:
+```bash
+sudo apt-get install -y gnat gprbuild libtool flex bison byacc
+
+sudo apt-get install libstdc++6
+sudo add-apt-repository ppa:ubuntu-toolchain-r/test 
+sudo apt-get update
+sudo apt-get upgrade
+sudo apt-get dist-upgrade
+```
+
 
 ### Example environment
+Set up the environment so that we can build [ROSE](https://github.com/rose-compiler/rose) and the LCOM Metric Analyzer:
 ```bash
-export GNAT_HOME=/PATH/TO/GNAT2019
+export GNAT_HOME="~/opt/GNAT/2019"
 export PATH="$GNAT_HOME/bin:$PATH"
 export LD_LIBRARY_PATH="$GNAT_HOME/lib64:$GNAT_HOME/lib:$LD_LIBRARY_PATH"
 
-export BOOST_HOME=/PATH/TO/BOOST
-export LD_LIBRARY_PATH=$BOOST_HOME/lib:$LD_LIBRARY_PATH
+export BOOST_HOME="~/boost_1_83_0/install"
+export LD_LIBRARY_PATH=$BOOST_HOME/stage/lib:$LD_LIBRARY_PATH
 export BOOST_ROOT=$BOOST_HOME
-export BOOST_LIB=$BOOST_ROOT/libexport
+export BOOST_LIB=$BOOST_ROOT/stage/libexport
 
-export ROSE_HOME=/PATH/TO/ROSE/INSTALL_TREE
+export ROSE_HOME=~/rose/install_tree
 export ROSE_ROOT=$ROSE_HOME
 
-export ASIS_ADAPTER=/PATH/TO/ROSE/BUILD/TREE/src/frontend/Experimental_Ada_ROSE_Connection/parser/asis_adapter
+export ASIS_ADAPTER=~/rose/build_tree/src/frontend/Experimental_Ada_ROSE_Connection/parser/asis_adapter
+```
+
+### Building GNAT Community Edition 2019:
+```bash
+wget -O gnat-community-2019-20190517-x86_64-linux-bin https://community.download.adacore.com/v1/0cd3e2a668332613b522d9612ffa27ef3eb0815b?filename=gnat-community-2019-20190517-x86_64-linux-bin&rand=1340
+chmod +x gnat-community-2019-20190517-x86_64-linux-bin 
+./gnat-community-2019-20190517-x86_64-linux-bin
+# Follow the setup instructions.
+```
+
+### Building BOOST
+Build and install [BOOST](https://www.boost.org/) using the GNAT compiler.
+```bash
+wget https://boostorg.jfrog.io/artifactory/main/release/1.84.0/source/boost_1_84_0.tar.bz2
+tar -xvf boost_1_84_0.tar.bz2
+pushd boost_1_84_0
+mkdir -p tools/build/src/
+echo "using gcc : 8.3.1 : /home/marioman/opt/GNAT/2019/bin/g++-8.3.1 ; " >> tools/build/src/user-config.jam
+bash bootstrap.sh
+./b2 -j$(nproc)
+./b2 install --prefix=$BOOST_HOME
+# The Boost C++ Libraries were successfully built!
+# The following directory should be added to compiler include paths:
+#     /home/marioman/boost_1_84_0
+# The following directory should be added to linker library paths:
+#     /home/marioman/boost_1_84_0/stage/lib
+popd
+```
+
+### Building ASIS
+
+```bash
+wget https://community.download.adacore.com/v1/52c69e7295dc301ce670334f8150193ecbec580d?filename=asis-2019-20190517-18AB5-src.tar.gz -O asis.tar.gz &&
+tar -xvzf asis.tar.gz &&
+rm asis.tar.gz &&
+pushd asis-2019-20190517-18AB5-src &&
+sed -i 's/for Library_Kind use \"static\";/for Library_Kind use \"dynamic\";/g' asis.gpr &&
+make all install prefix=$GNAT_HOME &&
+popd
 ```
 
 ### Building ROSE
@@ -75,16 +125,16 @@ export ASIS_ADAPTER=/PATH/TO/ROSE/BUILD/TREE/src/frontend/Experimental_Ada_ROSE_
 Build ROSE with Ada language support with the following commands.
 
 ```bash
-git clone https://github.com/rose-compiler/rose.git &&
+git clone --depth 1 https://github.com/rose-compiler/rose.git &&
 cd rose &&
 ./build &&
 mkdir -p build_tree &&
 cd build_tree &&
-../configure --prefix=$ROSE_HOME --enable-languages=c,c++ --enable-experimental_ada_frontend --without-swi-prolog --without-cuda --without-java --without-python --with-boost=$BOOST_HOME --with-boost-libdir=$BOOST_HOME/lib --verbose --with-DEBUG=-ggdb --with-alloc-memset=2 --with-OPTIMIZE="-O0 -march=native -p" --with-WARNINGS="-Wall -Wextra -Wno-misleading-indentation -Wno-unused-parameter" CXX=$GNAT_HOME/bin/g++ CC=$GNAT_HOME/bin/gcc &&
-make clean -j$(nproc) &&
-make -j$(nproc) &&
-make install -j$(nproc) &&
-make check -j$(nproc) &&
+../configure --prefix=$ROSE_HOME --enable-languages=c,c++ --enable-experimental_ada_frontend --without-swi-prolog --without-cuda --without-java --without-python --with-boost=$BOOST_HOME --verbose --with-DEBUG=-ggdb --with-alloc-memset=2 --with-OPTIMIZE="-O0 -march=native -p -DBOOST_TIMER_ENABLE_DEPRECATED" --with-WARNINGS="-Wall -Wextra -Wno-misleading-indentation -Wno-unused-parameter" CXX=$GNAT_HOME/bin/g++ CC=$GNAT_HOME/bin/gcc &&
+make clean -j$(nproc) ;
+make core -j$(nproc) &&
+make install-core -j$(nproc) &&
+make check-core -j$(nproc) &&
 cd exampleTranslators &&
 make -j$(nproc)
 ```
@@ -140,7 +190,7 @@ rm -r build/ # Remove the build directory to ensure a fresh build (rarely needed
 cmake -S . -B build # Create the build directory with autogenerated makefiles
 cmake --build build --parallel $(nproc) # Build all LCOM tools in parallel
 pushd build && ctest; popd # Run GTests sequentially
-/PATH/TO/TESTDIR/gtest-parallel/gtest-parallel build/lcom-unittest # Alternatively run GTests in parallel
+/PATH/TO/GTESTS/gtest-parallel/gtest-parallel build/lcom-unittest # Alternatively run GTests in parallel
 ```
 
 ### Full build command
@@ -148,7 +198,7 @@ pushd build && ctest; popd # Run GTests sequentially
 As an alternative to a proper build system, you can also build directly with the following command.
 
 ```bash
-g++ -o lcom.out src/lcom.cpp -Iinclude -I${ROSE_ROOT}/include/rose -I${BOOST_ROOT}/include -lrose -lboost_date_time -lboost_thread -lboost_filesystem -lboost_program_options -lboost_regex -lboost_system -lboost_serialization -lboost_wave -lboost_iostreams -lboost_chrono -ldl -lm -lquadmath -lasis_adapter -lstdc++fs -pthread -L${ROSE_ROOT}/lib -L${BOOST_ROOT}/lib -L$ASIS_ADAPTER/lib -Wl,-rpath ${BOOST_ROOT}/lib -Wl,-rpath $ASIS_ADAPTER/lib -Wl,-rpath=${ROSE_ROOT}/lib
+g++ -o build/lcom.out src/lcom.cpp -Iinclude -I${ROSE_ROOT}/include/rose -I${BOOST_ROOT}/include -lrose -lboost_date_time -lboost_thread -lboost_filesystem -lboost_program_options -lboost_regex -lboost_system -lboost_serialization -lboost_wave -lboost_iostreams -lboost_chrono -ldl -lm -lquadmath -lasis_adapter -lstdc++fs -pthread -L${ROSE_ROOT}/lib -L${BOOST_ROOT}/lib -L${ASIS_ADAPTER}/lib -Wl,-rpath ${BOOST_ROOT}/lib -Wl,-rpath ${ASIS_ADAPTER}/lib -Wl,-rpath=${ROSE_ROOT}/lib
 ```
 
 ## Usage
@@ -244,7 +294,7 @@ To determine if our tool produces the correct results, we must first report our 
 
 - Attributes that are never accessed do not count toward the attribute count used to calculate LCOM5.
 - All methods within a class are considered, even if they have no accessed attributes.
-- If an attribute is accessed multiple times within a method, it is seen as only a single access. This can affect LCOM5.
+- If an attribute is accessed multiple times within a method, it is seen as only a single access. This can affect LCOM5. 
 - If an attribute is never accessed, its existence will not be reported by the tool. This can affect LCOM5.
 - An array is seen as a single attribute for the purposes of LCOM.
 - When DotBehavior is set to LeftOnly, access to a record field counts as an access to the object as a whole. In this situation, we do not track individual fields as unique attributes.
@@ -272,10 +322,6 @@ While other languages are handled by ROSE, this tool has only been tested extens
 However, languages are complex and this tool may require significant additional work to handle complex language features in a reasonable way.
 Work could be done to improve support for other languages.
 
-### Investigate existing designs
-LCOM is a simple metric on its own, but real-world programming languages add complexity when considering a variety of language features.
-We should more deeply explore how existing designs handle those edge cases when calculating LCOM.
-
 ### Experiment with nested access behavior
 Currently, all attribute and called method accesses are associated only with their immediate scope parent class.
 It would be interesting to see how LCOM changes if we associated that access with all parent classes, to handle nested classes.
@@ -285,6 +331,7 @@ Once this is implemented, an associated test case should be made for [child.adb]
 ### Associate attributes in a called method back to the caller
 When a method calls another method, it indirectly accesses all of the attributes within that called method.
 We should see what happens to LCOM if we recursively identify these attributes and associate them back to the calling method.
+This should already be handled by LCOM4 but may impact the results of LCOM5.
 
 ### Count number of fields within a record
 LCOM5 currently counts the appearance of an attribute node as a single attribute access.
@@ -300,14 +347,9 @@ Once completed, a test case should be created for [p.adb](testcases/other-tests/
 The Ada analysis toolkit is a useful visualization tool to evaluate a codebase.
 LCOM could be integrated into this tool to color-code methods by LCOM and display their relationships in the code.
 
-### Release this software to the public
-LLNL has a [process](https://dev.llnl.gov/opensource/releasing/) to release source code under a permissive open source license.
-We should work to finish the publication process.
-It has already been started and can be continued on the [eSoftware dashboard](https://esw.llnl.gov/).
-
 ### Miscellany
 - Fix NPrint::p() in [node-print.hpp](include/node-print.hpp) to use a hierarchy of supported print functions.
-- Fix Cache in [lcom.hpp](include/lcom.hpp).
+- Fix Cache in [lcom.hpp](include/lcom.hpp) to improve performance.
 
 ## Related works and resources
 
@@ -321,8 +363,69 @@ It has already been started and can be continued on the [eSoftware dashboard](ht
 - [lcom](https://github.com/potfur/lcom): Python-based LCOM implementation
 - [LCOM4go](https://github.com/yahoojapan/lcom4go): Golang-based LCOM4 implementation
 
-# LLNL Software Release
 
-LLNL-CODE-858757
+# Other LCOM Tools
+
+## [JPeek](https://github.com/cqfn/jpeek)
+
+Installing: See README at https://github.com/cqfn/jpeek
+
+Running:
+```bash
+find -name "*.java" > sources.txt
+javac @sources.txt
+java -jar other-tools/jpeek-0.32.2-jar-with-dependencies.jar --sources testcases/paper --target ./other-tools/jpeek --overwrite --metrics LCOM,LCOM2,LCOM3,LCOM4,LCOM5
+```
+
+## [LCOM Metrics Computation](https://github.com/tushartushar/LCOM)
+
+Installing:
+```bash
+cd other-tools/LCOM
+sudo apt-get install maven -y
+mvn package
+```
+
+Running:
+```bash
+java -jar other-tools/LCOM/target/LCOM.jar -i testcases/paper -o other-tools/LCOM-MC
+```
+
+## [LCOM4go](https://github.com/yahoojapan/lcom4go)
+
+Installing: See README at https://github.com/yahoojapan/lcom4go
+```bash
+go install --ldflags "-s -w" --trimpath github.com/yahoojapan/lcom4go/cmd/lcom4@latest
+```
+
+Running:
+```bash
+$(go env GOPATH)/bin/lcom4
+```
 
 
+## [PyLCOM](https://github.com/tushartushar/LCOM)
+
+Installing:
+```bash
+ pip3 install lcom
+```
+
+Running:
+```bash
+~/.local/bin/lcom testcases/paper
+```
+
+## Running Everything
+
+```bash
+find testcases/paper/ -name "*.java" -print0 | xargs -0 javac && java -jar other-tools/jpeek-0.32.2-jar-with-dependencies.jar --sources testcases/paper --target ./other-tools/jpeek --overwrite --metrics LCOM,LCOM2,LCOM3,LCOM4,LCOM5
+
+java -jar other-tools/LCOM/target/LCOM.jar -i testcases/paper -o other-tools/LCOM-MC
+
+test=<Test Name Here>
+$(go env GOPATH)/bin/lcom4 testcases/paper/$test/$test.go
+# NOTE: Nothing is returned if LCOM = 1
+
+~/.local/bin/lcom testcases/paper
+```
