@@ -34,7 +34,7 @@ package body c4 is
 end c4;
 ```
 
-Our tool converts it into an LCOM graph, where each method is a box, each attribute is an ellipse, and arrows indicate a method access.
+Our tool converts it into an LCOM graph, where each method is a box, each attribute is an ellipse, and arrows indicate an attribute/method access.
 Note how methods can call other methods, with arrows between boxes indicating the calls.
 
 ![An LCOM DOT graph for c4.adb](resources/c4.svg)
@@ -45,104 +45,163 @@ This graph is analyzed by the tool using the [definitions of LCOM](#lcom-definit
 |-------|-------|-------|-------|-------|
 | 5     | 4     | 3     | 1     | 11/12 |
 
-## Dependencies
+## Installing
 
-- GNAT Community Edition 2019: https://blog.adacore.com/gnat-community-2019-is-here
-- BOOST libraries: https://www.boost.org/
-- ROSE compiler tool: https://github.com/rose-compiler/rose
+This tool has been tested to work with **Ubuntu 20.04** and **Ubuntu 22.04**, but in principle, any Linux distribution supported by ROSE should work.
 
+For ease of use, a `dockerfile` has been provided. It can be built using the following command:
+```bash
+docker build -t lcom -f dockerfile .
+```
+
+Manual installation instructions follow:
+
+### Dependencies
 Install the required dependencies using your package manager:
 ```bash
-sudo apt-get install -y gnat gprbuild libtool flex bison byacc
-
-sudo apt-get install libstdc++6
-sudo add-apt-repository ppa:ubuntu-toolchain-r/test 
 sudo apt-get update
-sudo apt-get upgrade
-sudo apt-get dist-upgrade
+sudo apt-get install -y bison byacc cmake dbus flex fontconfig g++ git gnat gprbuild libtool libx11-xcb1 make python3 wget
 ```
-
 
 ### Example environment
-Set up the environment so that we can build [ROSE](https://github.com/rose-compiler/rose) and the LCOM Metric Analyzer:
+Set up the environment by choosing where to install tools.
+Add these to your `.bashrc`.
+
 ```bash
-export GNAT_HOME="~/opt/GNAT/2019"
+# Set these to an install location of your preference for each tool.
+export GNAT_HOME="/GNAT/2019"
+# Set these based on where you place the associated git repositories.
+export BOOST_REPO="/boost_1_83_0"
+export ROSE_REPO="/rose"
+export LCOM_HOME="/ROSE-LCOM-Tools"
+
+# These paths make it possible for all tools to be found during the build and run process.
+# They should generally remain unchanged.
 export PATH="$GNAT_HOME/bin:$PATH"
-export LD_LIBRARY_PATH="$GNAT_HOME/lib64:$GNAT_HOME/lib:$LD_LIBRARY_PATH"
-
-export BOOST_HOME="~/boost_1_83_0/install"
-export LD_LIBRARY_PATH=$BOOST_HOME/stage/lib:$LD_LIBRARY_PATH
-export BOOST_ROOT=$BOOST_HOME
-export BOOST_LIB=$BOOST_ROOT/stage/libexport
-
-export ROSE_HOME=~/rose/install_tree
-export ROSE_ROOT=$ROSE_HOME
-
-export ASIS_ADAPTER=~/rose/build_tree/src/frontend/Experimental_Ada_ROSE_Connection/parser/asis_adapter
+# export LD_LIBRARY_PATH="$GNAT_HOME/lib64:$GNAT_HOME/lib:$LD_LIBRARY_PATH"
+export BOOST_HOME="$BOOST_REPO/install"
+export LD_LIBRARY_PATH="$BOOST_HOME/stage/lib":$LD_LIBRARY_PATH
+export BOOST_LIB="$BOOST_HOME/stage/libexport"
+export ROSE_HOME="$ROSE_REPO/install_tree"
+export BOOST_ROOT="$BOOST_HOME"
+export ASIS_ADAPTER="$ROSE_REPO/build_tree/src/frontend/Experimental_Ada_ROSE_Connection/parser/asis_adapter"
 ```
 
-### Building GNAT Community Edition 2019:
+### Installing GNAT Community Edition 2019:
+To install [GNAT](https://blog.adacore.com/gnat-community-2019-is-here), you can one of two methods: (1) an automated install using a community-created tool or (2) manually via a GUI.
+#### Automated install
 ```bash
-wget -O gnat-community-2019-20190517-x86_64-linux-bin https://community.download.adacore.com/v1/0cd3e2a668332613b522d9612ffa27ef3eb0815b?filename=gnat-community-2019-20190517-x86_64-linux-bin&rand=1340
+git clone --depth 1 https://github.com/AdaCore/gnat_community_install_script.git
+pushd gnat_community_install_script
+wget -O gnat-community-2019-20190517-x86_64-linux-bin https://community.download.adacore.com/v1/0cd3e2a668332613b522d9612ffa27ef3eb0815b?filename=gnat-community-2019-20190517-x86_64-linux-bin
+sh install_package.sh ./gnat-community-2019-20190517-x86_64-linux-bin $GNAT_HOME
+popd
+```
+*or*
+#### Manual install
+```bash
+wget -O gnat-community-2019-20190517-x86_64-linux-bin https://community.download.adacore.com/v1/0cd3e2a668332613b522d9612ffa27ef3eb0815b?filename=gnat-community-2019-20190517-x86_64-linux-bin
 chmod +x gnat-community-2019-20190517-x86_64-linux-bin 
 ./gnat-community-2019-20190517-x86_64-linux-bin
-# Follow the setup instructions.
+# Follow the setup instructions, installing to the location specified by $GNAT_HOME.
+```
+
+### Building ASIS
+```bash
+wget -O asis.tar.gz https://community.download.adacore.com/v1/52c69e7295dc301ce670334f8150193ecbec580d?filename=asis-2019-20190517-18AB5-src.tar.gz
+tar -xvzf asis.tar.gz
+pushd asis-2019-20190517-18AB5-src
+sed -i 's/for Library_Kind use \"static\";/for Library_Kind use \"dynamic\";/g' asis.gpr
+make all install prefix=$GNAT_HOME
+popd
+rm asis.tar.gz
 ```
 
 ### Building BOOST
 Build and install [BOOST](https://www.boost.org/) using the GNAT compiler.
 ```bash
-wget https://boostorg.jfrog.io/artifactory/main/release/1.84.0/source/boost_1_84_0.tar.bz2
-tar -xvf boost_1_84_0.tar.bz2
-pushd boost_1_84_0
+wget https://boostorg.jfrog.io/artifactory/main/release/1.83.0/source/boost_1_83_0.tar.bz2
+tar -xvf boost_1_83_0.tar.bz2
+pushd $BOOST_REPO
 mkdir -p tools/build/src/
-echo "using gcc : 8.3.1 : /home/marioman/opt/GNAT/2019/bin/g++-8.3.1 ; " >> tools/build/src/user-config.jam
+echo "using gcc : 8.3.1 : $GNAT_HOME/bin/g++ ; " >> tools/build/src/user-config.jam
 bash bootstrap.sh
 ./b2 -j$(nproc)
 ./b2 install --prefix=$BOOST_HOME
-# The Boost C++ Libraries were successfully built!
-# The following directory should be added to compiler include paths:
-#     /home/marioman/boost_1_84_0
-# The following directory should be added to linker library paths:
-#     /home/marioman/boost_1_84_0/stage/lib
 popd
-```
-
-### Building ASIS
-
-```bash
-wget https://community.download.adacore.com/v1/52c69e7295dc301ce670334f8150193ecbec580d?filename=asis-2019-20190517-18AB5-src.tar.gz -O asis.tar.gz &&
-tar -xvzf asis.tar.gz &&
-rm asis.tar.gz &&
-pushd asis-2019-20190517-18AB5-src &&
-sed -i 's/for Library_Kind use \"static\";/for Library_Kind use \"dynamic\";/g' asis.gpr &&
-make all install prefix=$GNAT_HOME &&
-popd
+rm boost_1_83_0.tar.bz2
 ```
 
 ### Building ROSE
+Build [ROSE](https://github.com/rose-compiler/rose) with Ada language support with the following commands.
 
-Build ROSE with Ada language support with the following commands.
+**NOTE**: The Ada representation in ROSE is not yet finalized, so incompatibilities with newer versions of ROSE may be possible. Our tool is confirmed to work with ROSE version `0.11.145.3`.
 
 ```bash
-git clone --depth 1 https://github.com/rose-compiler/rose.git &&
-cd rose &&
-./build &&
-mkdir -p build_tree &&
-cd build_tree &&
-../configure --prefix=$ROSE_HOME --enable-languages=c,c++ --enable-experimental_ada_frontend --without-swi-prolog --without-cuda --without-java --without-python --with-boost=$BOOST_HOME --verbose --with-DEBUG=-ggdb --with-alloc-memset=2 --with-OPTIMIZE="-O0 -march=native -p -DBOOST_TIMER_ENABLE_DEPRECATED" --with-WARNINGS="-Wall -Wextra -Wno-misleading-indentation -Wno-unused-parameter" CXX=$GNAT_HOME/bin/g++ CC=$GNAT_HOME/bin/gcc &&
-make clean -j$(nproc) ;
-make core -j$(nproc) &&
-make install-core -j$(nproc) &&
-make check-core -j$(nproc) &&
-cd exampleTranslators &&
+git clone --depth 1 https://github.com/rose-compiler/rose.git
+cd $ROSE_REPO
+./build
+mkdir -p build_tree
+pushd build_tree
+export LD_LIBRARY_PATH="$GNAT_HOME/lib64:$GNAT_HOME/lib:$LD_LIBRARY_PATH"
+../configure --prefix=$ROSE_HOME --enable-languages=c,c++ --enable-experimental_ada_frontend --without-swi-prolog --without-cuda --without-java --without-python --with-boost=$BOOST_HOME --verbose --with-DEBUG=-ggdb --with-alloc-memset=2 --with-OPTIMIZE="-O0 -march=native -p -DBOOST_TIMER_ENABLE_DEPRECATED" --with-WARNINGS="-Wall -Wextra -Wno-misleading-indentation -Wno-unused-parameter" CXX=$GNAT_HOME/bin/g++ CC=$GNAT_HOME/bin/gcc
+make core -j$(nproc)
+make install-core -j$(nproc)
+make check-core -j$(nproc)
+# Build the ROSE AST DOT graph generator.
+pushd exampleTranslators
 make -j$(nproc)
+popd
+popd
+# NOTE: You may need to restart your terminal after this to clear the changes to LD_LIBRARY_PATH. Adding GNAT to the path adds out-of-date libraries as well, and may throw errors when running certain commands. However, it is required for the build process.
+```
+
+## Building and testing the tool
+
+The recommended process uses [cmake](CMakeLists.txt). A [Makefile](Makefile) is also provided.
+
+Start by cloning the repo such that it is in the location specificed by `$LCOM_HOME`
+```bash
+git clone --depth 1 https://github.com/LLNL/ROSE-LCOM-Tools.git
+cd $LCOM_HOME
+```
+
+Now choose a build process, either using cmake or running the full build command.
+
+### cmake
+
+```bash
+rm -r build/; # Remove the build directory to ensure a fresh build (rarely needed)
+cmake -S . -B build # Create the build directory with autogenerated makefiles
+cmake --build build --parallel $(nproc) # Build all LCOM tools in parallel
+pushd build && ctest; popd # Run GTests sequentially
+
+# Alternatively run GTests in parallel
+git clone --depth=1 https://github.com/google/gtest-parallel.git
+gtest-parallel/gtest-parallel build/lcom-unittest
+```
+
+### Full build command
+
+As an alternative to a proper build system, you can also build directly with the following commands:
+
+```bash
+mkdir -p build
+# Main LCOM tool.
+g++ -o build/lcom.out src/lcom.cpp -Iinclude -I${ROSE_HOME}/include/rose -I${BOOST_HOME}/include -lrose -lboost_date_time -lboost_thread -lboost_filesystem -lboost_program_options -lboost_regex -lboost_system -lboost_serialization -lboost_wave -lboost_iostreams -lboost_chrono -ldl -lm -lquadmath -lasis_adapter -lstdc++fs -pthread -L${ROSE_HOME}/lib -L${BOOST_HOME}/lib -L${ASIS_ADAPTER}/lib -Wl,-rpath ${BOOST_HOME}/lib -Wl,-rpath ${ASIS_ADAPTER}/lib -Wl,-rpath=${ROSE_HOME}/lib
+# LCOM DOT graph generator for visualizations.
+g++ -o build/lcom-dot.out src/lcom-dot.cpp -Iinclude -I${ROSE_HOME}/include/rose -I${BOOST_HOME}/include -lrose -lboost_date_time -lboost_thread -lboost_filesystem -lboost_program_options -lboost_regex -lboost_system -lboost_serialization -lboost_wave -lboost_iostreams -lboost_chrono -ldl -lm -lquadmath -lasis_adapter -lstdc++fs -pthread -L${ROSE_HOME}/lib -L${BOOST_HOME}/lib -L${ASIS_ADAPTER}/lib -Wl,-rpath ${BOOST_HOME}/lib -Wl,-rpath ${ASIS_ADAPTER}/lib -Wl,-rpath=${ROSE_HOME}/lib
 ```
 
 ### Optional tests
 
 This tool has been tested with additional sources not included in this repo.
-You can prepare them for use with this tool using the following commands.
+You can prepare them for use with this tool using the following commands:
+
+```bash
+bash acats.sh &
+bash osc.sh
+```
 
 #### ACATS
 
@@ -151,7 +210,7 @@ ROSE is designed to support Ada 95, so we use the associated ACATS version, 2.6.
 
 #### Open-source code
 
-A small collection of open source code that uses the Ada 95 language.
+A collection of open source code that uses the Ada 95 language.
 
 | Project                                                                               | Ada lines of code |
 |---------------------------------------------------------------------------------------|------------------:|
@@ -175,30 +234,11 @@ This will download all of the projects in parallel.
 #### simple-cpp-programs
 
 Some basic C++ programs.
-These were used to verify functionality of the LCOM tool on C++ code.
+These were used to verify functionality of the LCOM tool on basic C++ code.
+More accurate, comprehensive C++ support is a work in progress.
 
 ```bash
 git clone https://github.com/amngupta/simple-cpp-programs.git testcases/simple-cpp-programs
-```
-
-## Building and testing the tool
-
-The recommended process uses [cmake](CMakeLists.txt). A [Makefile](Makefile) is also provided.
-
-```bash
-rm -r build/ # Remove the build directory to ensure a fresh build (rarely needed)
-cmake -S . -B build # Create the build directory with autogenerated makefiles
-cmake --build build --parallel $(nproc) # Build all LCOM tools in parallel
-pushd build && ctest; popd # Run GTests sequentially
-/PATH/TO/GTESTS/gtest-parallel/gtest-parallel build/lcom-unittest # Alternatively run GTests in parallel
-```
-
-### Full build command
-
-As an alternative to a proper build system, you can also build directly with the following command.
-
-```bash
-g++ -o build/lcom.out src/lcom.cpp -Iinclude -I${ROSE_ROOT}/include/rose -I${BOOST_ROOT}/include -lrose -lboost_date_time -lboost_thread -lboost_filesystem -lboost_program_options -lboost_regex -lboost_system -lboost_serialization -lboost_wave -lboost_iostreams -lboost_chrono -ldl -lm -lquadmath -lasis_adapter -lstdc++fs -pthread -L${ROSE_ROOT}/lib -L${BOOST_ROOT}/lib -L${ASIS_ADAPTER}/lib -Wl,-rpath ${BOOST_ROOT}/lib -Wl,-rpath ${ASIS_ADAPTER}/lib -Wl,-rpath=${ROSE_ROOT}/lib
 ```
 
 ## Usage
@@ -218,7 +258,7 @@ Run `bash allTest.sh` to run tests.
 - gen_lcom
 - make_lcom_dot_graphs
 - combine_csv
-- run_gtests
+- run_gtests **NOTE**: Will not work without cmake.
 
 Multiple tasks, each separated by a space, can be selected to run in one test.
 If no task is specified, all of them will run.
@@ -248,7 +288,7 @@ The parent class is identified by traversing up to parent scopes until a matchin
 When an attribute is seen, it is added to the list of attributes and associated to its parent method.
 The parent method is identified by traversing up to parent scopes until a matching method type is seen.
 
-#### Called Method
+#### Called method
 
 When a method is called, it is associated to the method that called it by traversing up to parent scopes until a matching method type is seen.
 
@@ -363,8 +403,7 @@ LCOM could be integrated into this tool to color-code methods by LCOM and displa
 - [lcom](https://github.com/potfur/lcom): Python-based LCOM implementation
 - [LCOM4go](https://github.com/yahoojapan/lcom4go): Golang-based LCOM4 implementation
 
-
-# Other LCOM Tools
+# Other LCOM tools
 
 ## [JPeek](https://github.com/cqfn/jpeek)
 
@@ -416,7 +455,7 @@ Running:
 ~/.local/bin/lcom testcases/paper
 ```
 
-## Running Everything
+## Running all competing tools
 
 ```bash
 find testcases/paper/ -name "*.java" -print0 | xargs -0 javac && java -jar other-tools/jpeek-0.32.2-jar-with-dependencies.jar --sources testcases/paper --target ./other-tools/jpeek --overwrite --metrics LCOM,LCOM2,LCOM3,LCOM4,LCOM5

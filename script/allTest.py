@@ -19,11 +19,10 @@ class Config:
     """
 
     # The root of the project.
-    PROJECT = "/PATH/TO/PROJECT/lcom-metric-analyzer"
+    PROJECT = os.environ["LCOM_HOME"]
     # The location of the DOT generator executable. Used to create ROSE DOT graphs.
-    dotGenerator = (
-        "/PATH/TO/ROSE/BUILD_TREE/exampleTranslators/DOTGenerator/dotGenerator"
-    )
+    dotGenerator = os.path.join(os.environ["ROSE_REPO"],
+                   "build_tree/exampleTranslators/DOTGenerator/dotGenerator")
     # An include string. Used to include necessary support files.
     # Currently only used to build ACATS tests.
     INCLUDE = "-I" + os.path.join(PROJECT, "testcases/acats/support")

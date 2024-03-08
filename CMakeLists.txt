@@ -20,8 +20,11 @@ find_package(Boost REQUIRED COMPONENTS
 
 include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}/include
-  $ENV{ROSE_ROOT}/include/rose
-  $ENV{BOOST_ROOT}/include
+  # NOTE: ENV Not working here for some reason.
+  # You must manually specify the path for cmake to work, for now.
+  # $ENV{ROSE_HOME}/include/rose
+  /rose/install_tree/include/rose
+  $ENV{BOOST_HOME}/include/boost
 )
 link_libraries(
     rose
@@ -42,11 +45,11 @@ link_libraries(
     stdc++fs
 )
 link_directories(
-    $ENV{ROSE_ROOT}/lib
-    $ENV{BOOST_ROOT}/lib
+    $ENV{ROSE_HOME}/lib
+    $ENV{BOOST_HOME}/lib
     $ENV{ASIS_ADAPTER}/lib
 )
-SET(CMAKE_INSTALL_RPATH "$ENV{BOOST_ROOT}/lib;$ENV{ASIS_ADAPTER}/lib;$ENV{ROSE_ROOT}/lib")
+SET(CMAKE_INSTALL_RPATH "$ENV{BOOST_HOME}/lib;$ENV{ASIS_ADAPTER}/lib;$ENV{ROSE_HOME}/lib")
 
 
 # lcom.out

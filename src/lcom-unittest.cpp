@@ -93,8 +93,8 @@ void CheckLCOMInput(const std::vector<LCOM::Class<C, Method, Attribute>>& input,
     EXPECT_EQ(LCOM::LCOM2(input[i]), expCls.LCOM2);
     EXPECT_EQ(LCOM::LCOM3(input[i]), expCls.LCOM3);
     EXPECT_EQ(LCOM::LCOM4(input[i]), expCls.LCOM4);
-    if (isnan(expCls.LCOM5)) {
-      EXPECT_TRUE(isnan(LCOM::LCOM5(input[i], &data5)));
+    if (std::isnan(expCls.LCOM5)) {
+      EXPECT_TRUE(std::isnan(LCOM::LCOM5(input[i], &data5)));
     } else {
       EXPECT_EQ(LCOM::LCOM5(input[i], &data5), expCls.LCOM5);
     }
