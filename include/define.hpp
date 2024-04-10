@@ -42,6 +42,7 @@ enum class ClassType {
   Function,
   Class,
   ProtectedObject,
+  Namespace,
   All
 };
 std::ostream& operator<<(std::ostream& os, const ClassType& c) {
@@ -60,6 +61,9 @@ std::ostream& operator<<(std::ostream& os, const ClassType& c) {
       break;
     case ClassType::ProtectedObject:
       os << "ProtectedObject";
+      break;
+    case ClassType::Namespace:
+      os << "Namespace";
       break;
     case ClassType::All:
       os << "All";
