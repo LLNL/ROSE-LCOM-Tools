@@ -199,6 +199,11 @@ static SgNode* GetScopeRecurse(SgNode* n, SgNode* orig) {
                << NPrint::p(fd->get_declaration()) << std::endl;
     return GetScopeRecurse<T>(fd->get_declaration(), orig);
   }
+  if (SgNamespaceDefinitionStatement* nd = is<SgNamespaceDefinitionStatement>(n)) {
+    LOG(TRACE) << "n was an SgNamespaceDefinitionStatement. Traversing up to "
+               << NPrint::p(nd->get_namespaceDeclaration()->get_firstNondefiningDeclaration()) << std::endl;
+    return GetScopeRecurse<T>(nd->get_namespaceDeclaration()->get_firstNondefiningDeclaration(), orig);
+  }
   if (SgAdaUnitRefExp* aure = is<SgAdaUnitRefExp>(n)) {
     LOG(TRACE) << "n was an SgAdaUnitRefExp. Traversing up to "
                << NPrint::p(aure->get_decl()) << std::endl;
@@ -1177,7 +1182,7 @@ class RenamingTraversal : public AstTopDownProcessing<IA<C>> {
     // TODO: Ensure the class is within the currently analyzed file?
 
     IA<C>::classData.emplace(c, std::move(Class<C>(c, sourceFile)));
-    LOG(DEBUG) << IA<C>::printClassData() << std::endl;
+    LOG(TRACE) << IA<C>::printClassData() << std::endl;
     return IA<C>(ia);
   }
   static IA<C> HandleSgAdaRenamingDecl(SgAdaRenamingDecl*& renameId,
@@ -1229,12 +1234,12 @@ class RenamingTraversal : public AstTopDownProcessing<IA<C>> {
       }
       // The class should already be in the map.
       if (!IA<C>::classData.count(owningClassId)) {
-        LOG(INFO) << "Class " << NPrint::p(owningClassId)
+        LOG(TRACE) << "Class " << NPrint::p(owningClassId)
                   << " missing from classData map. " << IA<C>::printClassData()
                   << ". Inserting..." << std::endl;
         IA<C>::classData.emplace(
             owningClassId, std::move(Class<C>(owningClassId, sourceFile)));
-        LOG(DEBUG) << IA<C>::printClassData() << std::endl;
+        LOG(TRACE) << IA<C>::printClassData() << std::endl;
       }
       Class<C>& owningClass = IA<C>::classData.at(owningClassId);
 
@@ -1255,12 +1260,19 @@ class RenamingTraversal : public AstTopDownProcessing<IA<C>> {
   }
 
  public:
+  // This method is called for each node visited during the AST traversal. 
+  // The return value (IA) computed here is the input value to this function at all child nodes
   IA<C> evaluateInheritedAttribute(SgNode* n, IA<C> ia) {
     if (SgSourceFile* sf = is<SgSourceFile>(n)) {
       LOG(INFO) << "Handling SgSourceFile " << NPrint::p(sf) << std::endl;
       return HandleSourceFile(sf, ia);
     } else if (C c = is<C>(n)) {
       LOG(INFO) << "Handling C " << NPrint::p(c) << std::endl;
+      if (SgNamespaceDeclarationStatement* ns = is<SgNamespaceDeclarationStatement>(n)) {
+        LOG(INFO) << "Handling SgNamespaceDeclarationStatement " << NPrint::p(ns) << std::endl;
+        C c = is<C>(ns->get_firstNondefiningDeclaration());
+        return HandleClass(c, ia);
+      }
       return HandleClass(c, ia);
     } else if (SgAdaRenamingDecl* ard = is<SgAdaRenamingDecl>(n)) {
       LOG(INFO) << "Handling SgAdaRenamingDecl " << NPrint::p(ard) << std::endl;
@@ -1287,12 +1299,14 @@ const std::vector<LCOM::Class<C, MType, AType>> GetClassData(
   IA<C> ia = IA<C>();
 
   // Start by finding attribute renamings in a first pass.
+  LOG(INFO) << "Starting renaming traversal." << std::endl;
   RenamingTraversal<C> rTraversal;
-  rTraversal.traverseInputFiles(project, ia);
+  rTraversal.traverse(project, ia);
 
   // Now perform the main traversal.
+  LOG(INFO) << "Starting visitor traversal." << std::endl;
   VisitorTraversal<C> vTraversal;
-  vTraversal.traverseInputFiles(project, ia);
+  vTraversal.traverse(project, ia);
 
   // Convert node data into a format accepted by LCOM.
   std::vector<LCOM::Class<C, MType, AType>> dataLCOM;
