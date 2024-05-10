@@ -138,9 +138,10 @@ def run(args, out=None, cwd=Config.PROJECT):
         stderr = stdout
     if not os.path.exists(cwd):
         os.makedirs(cwd, exist_ok=True)
-    return subprocess.Popen(
+    process = subprocess.Popen(
         args, stdout=stdout, stderr=stderr, preexec_fn=set_proc_limits, cwd=cwd
     )
+    return process
 
 
 def list_files(directory_path, extensions, use_exclusions=False):
@@ -335,7 +336,7 @@ def run_gtests():
     print("Running unit tests")
     tests = run(
         [
-            "/PATH/TO/GTESTS/gtest-parallel/gtest-parallel",
+            os.path.join(os.environ["GTEST_REPO"], "gtest-parallel"),
             os.path.join(Config.BUILD_DIR, "lcom-unittest"),
         ],
         cwd=os.path.join(Config.OUT_DIR, "workingDir-gtest"),

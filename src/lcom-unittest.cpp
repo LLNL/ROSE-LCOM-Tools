@@ -50,6 +50,7 @@ struct LCOMClassData {
   DotBehavior dot;
   boost::optional<LCOMData> PackageData = boost::none;
   boost::optional<LCOMData> ProtectedData = boost::none;
+  boost::optional<LCOMData> ClassData = boost::none;
 
   // Generate the test name.
   static std::string PrintTo(
@@ -68,10 +69,14 @@ struct LCOMClassData {
 class LCOMTest : public ::testing::TestWithParam<LCOMClassData> {
  protected:
   SgProject* project;
+  // Unfortunately, these must be specified for each class type you want to
+  // evaluate. This is a limitation in the way GTests support templated code.
   std::vector<LCOM::Class<SgAdaPackageSpec*, Method, Attribute>>
       LCOMInputPackage;
   std::vector<LCOM::Class<SgAdaProtectedSpec*, Method, Attribute>>
       LCOMInputProtected;
+  std::vector<LCOM::Class<SgClassDeclaration*, Method, Attribute>>
+      LCOMInputClass;
 
   void SetUpProject(const boost::filesystem::path& source, DotBehavior dot) {
     std::vector<std::string> cmdLineArgs{EXEC.string(), source.string()};
@@ -118,8 +123,32 @@ TEST_P(LCOMTest, CheckClass) {
     LCOMInputProtected = Traverse::GetClassData<SgAdaProtectedSpec*>(project);
     CheckLCOMInput(LCOMInputProtected, *(exp.ProtectedData));
   }
+  if (exp.ClassData != boost::none) {
+    LCOMInputClass = Traverse::GetClassData<SgClassDeclaration*>(project);
+    CheckLCOMInput(LCOMInputClass, *(exp.ClassData));
+  }
   return;
 }
+
+// Structure of a test:
+// LCOMClassData{
+//     // Location of the test.
+//     .source = TESTS / "other-tests/nested.adb",
+//     // Dot behavior, Full or LeftOnly (root).
+//     .dot = DotBehavior::Full,
+//     // A list of all classes found in this file, in order of appearance.
+//     .PackageData{LCOMData{.classes{
+//         LCOMData::LCOMClass{
+//             // The LCOM values for this class.
+//             .LCOM1 = 1,
+//             .LCOM2 = 1,
+//             .LCOM3 = 2,
+//             .LCOM4 = 2,
+//             .LCOM5 = (double)1,
+//             // The number of shared and unshared pairs, used in LCOM 1-2.
+//             .data1{.sharedPairs = 0, .unsharedPairs = 1, .totalPairs = 1},
+//             // The number of attribute accesses, attributes, methods.
+//             .data5{.a = 2, .l = 2, .k = 2}}}}}},
 
 INSTANTIATE_TEST_SUITE_P(
     SimpleCases, LCOMTest,
@@ -696,5 +725,28 @@ INSTANTIATE_TEST_SUITE_P(
                 .LCOM4 = 1,
                 .LCOM5 = (double)0 / (double)-1,
                 .data1{.sharedPairs = 1, .unsharedPairs = 0, .totalPairs = 1},
-                .data5{.a = 2, .l = 1, .k = 2}}}}}}),
+                .data5{.a = 2, .l = 1, .k = 2}}}}}},
+        LCOMClassData{
+            .source = TESTS / "other-tests/p.adb",
+            .dot = DotBehavior::Full,
+            .ClassData{LCOMData{.classes{
+                LCOMData::LCOMClass{
+                    .LCOM1 = 0,
+                    .LCOM2 = 0,
+                    .LCOM3 = 1,
+                    .LCOM4 = 1,
+                    .LCOM5 = std::numeric_limits<double>::quiet_NaN(),
+                    .data1{
+                        .sharedPairs = 0, .unsharedPairs = 0, .totalPairs = 0},
+                    .data5{.a = 1, .l = 1, .k = 1}},
+                LCOMData::LCOMClass{
+                    .LCOM1 = 0,
+                    .LCOM2 = 0,
+                    .LCOM3 = 1,
+                    .LCOM4 = 1,
+                    .LCOM5 = std::numeric_limits<double>::quiet_NaN(),
+                    .data1{
+                        .sharedPairs = 0, .unsharedPairs = 0, .totalPairs = 0},
+                    // TODO: Not seeing A in this class for some reason. I think it's because my code isn't designed to accomodate an attribute existing in multiple classes.
+                    .data5{.a = 2, .l = 2, .k = 1}}}}}}),
     LCOMClassData::PrintTo);

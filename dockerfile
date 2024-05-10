@@ -1,13 +1,19 @@
-FROM ubuntu:20.04
+#dockerfile
 
-# Prepare to install the required system packages
+FROM amd64/ubuntu:20.04
+
+# Fix caching issues caused by MDM on macOS.
+# RUN touch /etc/apt/apt.conf.d/99fixbadproxy
+# RUN echo "Acquire::http::Pipeline-Depth 0;Acquire::http::No-Cache true;Acquire::BrokenProxy true;" >> /etc/apt/apt.conf.d/99fixbadproxy
+
+# Prepare to install the required system packages.
 RUN apt-get update
 # Needed to prevent tzdata install from requesting time zone info interactively.
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get install -y bison byacc cmake dbus flex fontconfig g++ git gnat gprbuild groff libtool libx11-xcb1 make perl-doc python3 wget
 RUN apt-get clean
 
-# Set up GNAT
+# Set up GNAT.
 WORKDIR /
 ENV GNAT_HOME="/GNAT/2019"
 ENV PATH="$GNAT_HOME/bin:$PATH"
@@ -17,7 +23,7 @@ WORKDIR /gnat_community_install_script
 ADD https://community.download.adacore.com/v1/0cd3e2a668332613b522d9612ffa27ef3eb0815b?filename=gnat-community-2019-20190517-x86_64-linux-bin /gnat-community-2019-20190517-x86_64-linux-bin
 RUN sh install_package.sh /gnat-community-2019-20190517-x86_64-linux-bin $GNAT_HOME
 
-# Set up ASIS
+# Set up ASIS.
 WORKDIR /
 ADD https://community.download.adacore.com/v1/52c69e7295dc301ce670334f8150193ecbec580d?filename=asis-2019-20190517-18AB5-src.tar.gz /asis.tar.gz
 RUN tar -xvzf asis.tar.gz
@@ -25,7 +31,7 @@ WORKDIR /asis-2019-20190517-18AB5-src
 RUN sed -i 's/for Library_Kind use \"static\";/for Library_Kind use \"dynamic\";/g' asis.gpr
 RUN make all install prefix=$GNAT_HOME
 
-# Set up Boost
+# Set up Boost.
 WORKDIR /
 ENV BOOST_HOME="/boost_1_83_0/install"
 ENV BOOST_ROOT="$BOOST_HOME"
@@ -40,7 +46,7 @@ RUN bash bootstrap.sh
 RUN ./b2 -j$(nproc)
 RUN ./b2 install --prefix=$BOOST_HOME
 
-# Set up ROSE
+# Set up ROSE.
 WORKDIR /
 ENV ROSE_REPO="/rose"
 ENV ROSE_HOME="$ROSE_REPO/install_tree"
@@ -60,10 +66,15 @@ RUN make check-core -j$(nproc)
 WORKDIR exampleTranslators
 RUN make -j$(nproc)
 
-# Set up LCOM Metric Analyzer
+# Set up GTests Parallel.
+WORKDIR /
+ENV GTEST_REPO="/gtest-parallel"
+RUN git clone --depth 1 https://github.com/google/gtest-parallel.git
+
+# Set up LCOM Metric Analyzer.
 ENV LCOM_HOME="/ROSE-LCOM-TOOL"
 WORKDIR $LCOM_HOME
-# Copy the repository data
+# Copy the repository data.
 COPY . .
 # Ensure the build directory exists.
 RUN mkdir -p build
