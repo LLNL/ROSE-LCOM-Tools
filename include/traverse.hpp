@@ -126,7 +126,6 @@ class AType {
   std::vector<T> GetIds() const { return ids; }
 };
 
-
 // Attributes don't use an alias. Instead, they use a custom class.
 // Using AType = std::vector<SgInitializedName*>;
 
@@ -137,6 +136,16 @@ using MType = SgFunctionDeclaration*;
 // Class don't use an alias. Instead, it is specified using templates.
 // using C = SgAdaPackageSpec*;
 
+// Compare two vectors for matching contents, even if reordered.
+template <class T>
+bool compareVectors(std::vector<T> a, std::vector<T> b) {
+  if (a.size() != b.size()) {
+    return false;
+  }
+  std::sort(a.begin(), a.end());
+  std::sort(b.begin(), b.end());
+  return (a == b);
+}
 
 // NOTE: We use a recursive call for the sake of the type system. Intermediate
 // results may not be the right node type, but the final one always should be.
@@ -232,6 +241,105 @@ static T GetScope(AType n) {
              << std::endl;
   if (!n.GetId()) LOG(FATAL) << "n.GetId() was null for " << n << std::endl;
   return is<T>(GetScopeRecurse<T>(n.GetId(), n.GetId()));
+}
+
+template <typename C>
+std::vector<C> GetRecords(SgNode* n) {
+  std::vector<C> owningClassIds;
+  // Tagged records approach.
+  // Functions/procedures that are tied to a tagged record will list the tagged
+  // record as a parameter. This code will find the classes associated with
+  // those parameters.
+  if (SgFunctionDeclaration* fd = is<SgFunctionDeclaration>(n)) {
+    std::vector<SageInterface::Ada::PrimitiveParameterDesc> records;
+    records = SageInterface::Ada::primitiveParameterPositions(fd);
+    for (auto& record : records) {
+      // Get the type declaration of this record.
+      // TODO: There seem to be some dupes. Ask Peter about it.
+      SgDeclarationStatement* typeDeclaration =
+          record.typeDeclaration()->get_firstNondefiningDeclaration();
+      // If it is a class, add it to the list.
+      if (C classId = is<C>(typeDeclaration)) {
+        LOG(DEBUG) << NPrint::p(n) << " is a method within the class, "
+                   << NPrint::p(classId) << std::endl;
+        owningClassIds.push_back(classId);
+      }
+    }
+  }
+  return owningClassIds;
+}
+
+// Helper function to handle the conditional logic
+template <typename C>
+void GetClassIdsHelper(SgNode* n, std::vector<C>& owningClassIds,
+                       std::true_type) {
+  std::vector<C> recordClassIds = GetRecords<C>(n);
+  owningClassIds.insert(owningClassIds.end(), recordClassIds.begin(),
+                        recordClassIds.end());
+}
+
+// Overload for when C is not an SgClassDeclaration*
+template <typename C>
+void GetClassIdsHelper(SgNode* n, std::vector<C>& owningClassIds,
+                       std::false_type) {
+  // Do nothing.
+  return;
+}
+
+// SageInterfaceAda PrimitiveParameterDesc
+// Checks for a type defined at the same package level.
+// Gives position and name of parameter.
+// Could be one of several types. Would need to test type as record type and
+// check if record type is tagged. SgInitializedName->GetType can find it is
+// record type. Can check if record declaration is tagged.
+// TODO: Important to disallow duplciates?
+// TODO: Need to make this a part of the search for parent classes.
+template <typename C>
+std::vector<C> GetClassIds(SgNode* n) {
+  LOG(TRACE) << "Getting class IDs for " << NPrint::p(n) << std::endl;
+  std::vector<C> owningClassIds;
+
+  // Standard way of getting a class ID.
+  // Traverse up the scope until we find the class containing this node.
+  const C owningClassId = GetScope<C>(n);
+  if (owningClassId != nullptr) {
+    LOG(TRACE) << "Found a base class, " << NPrint::p(owningClassId)
+               << std::endl;
+    owningClassIds.push_back(owningClassId);
+  }
+
+  GetClassIdsHelper(n, owningClassIds, std::is_same<C, SgClassDeclaration*>());
+
+  return owningClassIds;
+}
+
+bool IsClassOwner(SgExpression* id, const MType& mId) {
+  const std::vector<SgClassDeclaration*> owningClassIds =
+      GetRecords<SgClassDeclaration*>(mId);
+  // Peter: use sageinterface ada type of expression instead of get_type
+  // Peter: Could cast type to a SgClassType or SgNamedType, which will have a
+  // good get_declaration method.
+  SgDeclarationStatement* declPeter =
+      is<SgClassType>(SageInterface::Ada::typeOfExpr(id).typerep())
+          ->get_declaration();
+  SgDeclarationStatement* decl = id->get_type()->getAssociatedDeclaration();
+  LOG(TRACE) << "declPeter=" << declPeter << "\tdecl=" << decl << "\t"
+             << (decl == declPeter) << std::endl;
+
+  if (SgClassDeclaration* classRefId = is<SgClassDeclaration>(decl)) {
+    for (const auto& classId : owningClassIds) {
+      // Peter: Try pointer for first nondefining declaration instead of
+      // getname.
+      if (classId->get_firstNondefiningDeclaration() ==
+          classRefId->get_firstNondefiningDeclaration()) {
+        LOG(TRACE) << "Found a match for " << NPrint::p(classRefId)
+                   << std::endl;
+        return true;
+      }
+    }
+  }
+  LOG(TRACE) << "No match found for " << NPrint::p(id) << std::endl;
+  return false;
 }
 
 // Class, Method, and Attribute objects are all Component types.
@@ -612,23 +720,25 @@ T GetBaseRootExp(SgExpression* id) {
   return t;
 }
 
-// TODO: Get the owning class when the method passes in the
-// associated tagged type class as an argument rather than being
-// directly in scope.
-// if (/*Tagged type is first argument*/ false) {
-//   owningClass = owningClass.methodMap[taggedType];
-// }
-// To start this process, we should begin by checking if SgNode is some sort of function. Then we need to find documentation on how to get the argument list for the function and their associated types. If we find that the first argument is a class (a tagged type, more specifically), then we need to get the class ID of that tagged type.
-// It would be helpful; to create a minimum viable example and print a DOT graph of it to see the relationships created.
 template <typename C>
 Class<C>* GetOwningClass(SgNode* n) {
-  const C owningClassId = GetScope<C>(n);
-  if (owningClassId == nullptr) return nullptr;
+  const std::vector<C> owningClassIds = GetClassIds<C>(n);
+
+  // TODO: Not a safe assumption, but we will see how much damage this causes.
+  if (owningClassIds.size() > 1) {
+    LOG(WARNING) << "owningClassIds.size() = " << owningClassIds.size()
+                 << ". This method is owned by multiple classes, some of which "
+                    "will be ignored!"
+                 << std::endl;
+  } else if (owningClassIds.size() == 0)
+    return nullptr;
+
+  const C owningClassId = owningClassIds[0];
   // The class should already be in the map.
   if (!IA<C>::classData.count(owningClassId)) {
     LOG(INFO) << "Class " << NPrint::p(owningClassId)
-              << " missing from classData map. " << IA<C>::printClassData()
-              << ". Inserting..." << std::endl;
+              << " missing from classData map. Inserting... "
+              << IA<C>::printClassData() << std::endl;
     auto e = IA<C>::classData.emplace(
         owningClassId, std::move(Class<C>(owningClassId, sourceFile)));
     const bool success = std::get<1>(e);
@@ -759,7 +869,7 @@ class VisitorTraversal : public AstTopDownProcessing<IA<C>> {
     return IA<C>(ia);
   }
 
-  static IA<C> HandleSgVarRefExp(SgVarRefExp* id, IA<C> ia) {
+  static IA<C> HandleSgVarRefExp(SgExpression* id, IA<C> ia) {
     // Get the root expression. This resolves renamings, fields, and pointers.
     std::vector<SgExpression*> root = GetRootExp(id);
     SgVarRefExp* baseRootExp = is<SgVarRefExp>(GetBaseRootExp(root));
@@ -771,6 +881,8 @@ class VisitorTraversal : public AstTopDownProcessing<IA<C>> {
     Method<C>* mPtr = GetOwningMethod<C>(baseRootExp);
     if (!mPtr) return IA<C>(ia);
     Method<C>& owningMethod = *mPtr;
+
+    // Class<C>& owningClass = owningMethod.owningClass;
 
     std::vector<AType::T> decl = AType::ToAttrList(root);
 
@@ -789,9 +901,17 @@ class VisitorTraversal : public AstTopDownProcessing<IA<C>> {
       }
     } else if (dotBehavior == DotBehavior::Full) {
       if (SgDotExp* parent = is<SgDotExp>(id->get_parent())) {
+        const bool isTaggedRoot =
+            is<SgClassDeclaration>(owningClass.GetId()) &&
+            IsClassOwner(parent->get_lhs_operand(), owningMethod.GetId());
         // Only process the bottom left leaf of a dot expression to avoid
         // processing portions of the expression multiple times.
-        if (parent->get_lhs_operand() != id) {
+        if (!isTaggedRoot && parent->get_lhs_operand() != id) {
+          LOG(INFO)
+              << NPrint::p(id)
+              << " is not the leftmost part of the dot expression. "
+              << "Skipping to avoid processing the expression multiple times."
+              << std::endl;
           return IA<C>(ia);
         }
         // Build up a vector of all records leading to this specific field in
@@ -806,11 +926,6 @@ class VisitorTraversal : public AstTopDownProcessing<IA<C>> {
         // Make sure we do not "overspecify" and end up with a chain too
         // long, that goes above the scope of the record class we are
         // currently evaluating when C is a record type.
-        const C topClassId = GetScope<C>(decl[0]);
-        if (owningClass.GetId() != topClassId)
-          LOG(FATAL) << "Unexpected mismatch between owningClass.GetId() ("
-                     << NPrint::p(owningClass.GetId()) << ") and topClassId ("
-                     << NPrint::p(topClassId) << ")" << std::endl;
       }
     }
     // Convert the decl to a proper AType.

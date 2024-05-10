@@ -8,7 +8,7 @@ Cohesion is measured using the various LCOM (Lack of Cohesion of Methods) metric
 
 ## Example
 
-Given the following source code for the class in [c4.adb](testcases/simple-cases/c4.adb):
+Given the following source code for the class in [`c4.adb`](testcases/simple-cases/c4.adb):
 
 ```ada
 package body c4 is
@@ -73,6 +73,7 @@ export GNAT_HOME="/GNAT/2019"
 # Set these based on where you place the associated git repositories.
 export BOOST_REPO="/boost_1_83_0"
 export ROSE_REPO="/rose"
+export GTEST_REPO="/gtest-parallel"
 export LCOM_HOME="/ROSE-LCOM-Tools"
 
 # These paths make it possible for all tools to be found during the build and run process.
@@ -138,7 +139,8 @@ Build [ROSE](https://github.com/rose-compiler/rose) with Ada language support wi
 **NOTE**: The Ada representation in ROSE is not yet finalized, so incompatibilities with newer versions of ROSE may be possible. Our tool is confirmed to work with ROSE version `0.11.145.3`.
 
 ```bash
-git clone --depth 1 https://github.com/rose-compiler/rose.git
+mkdir -p $ROSE_REPO
+git -C $ROSE_REPO --depth 1 https://github.com/rose-compiler/rose.git .
 cd $ROSE_REPO
 ./build
 mkdir -p build_tree
@@ -156,17 +158,26 @@ popd
 # NOTE: You may need to restart your terminal after this to clear the changes to LD_LIBRARY_PATH. Adding GNAT to the path adds out-of-date libraries as well, and may throw errors when running certain commands. However, it is required for the build process.
 ```
 
+### Setting up Google Tests Parallel Script
+This is used by [`allTest.py`](script/allTest.py) to run all test cases in parallel.
+
+```bash
+mkdir -p $GTEST_REPO
+git -C $GTEST_REPO --depth 1 https://github.com/google/gtest-parallel.git .
+```
+
 ## Building and testing the tool
 
-The recommended process uses [cmake](CMakeLists.txt). A [Makefile](Makefile) is also provided.
+The recommended process uses [`cmake`](CMakeLists.txt). A [`Makefile`](Makefile) is also provided.
 
-Start by cloning the repo such that it is in the location specificed by `$LCOM_HOME`
+Start by cloning the repo such that it is in the location specified by `$LCOM_HOME`
 ```bash
-git clone --depth 1 https://github.com/LLNL/ROSE-LCOM-Tools.git
+mkdir -p $LCOM_HOME
+git -C $LCOM_HOME --depth 1 https://github.com/LLNL/ROSE-LCOM-Tools.git .
 cd $LCOM_HOME
 ```
 
-Now choose a build process, either using cmake or running the full build command.
+Now choose a build process, either using `cmake` or running the full build command.
 
 ### cmake
 
@@ -177,8 +188,7 @@ cmake --build build --parallel $(nproc) # Build all LCOM tools in parallel
 pushd build && ctest; popd # Run GTests sequentially
 
 # Alternatively run GTests in parallel
-git clone --depth=1 https://github.com/google/gtest-parallel.git
-gtest-parallel/gtest-parallel build/lcom-unittest
+$GTEST_REPO/gtest-parallel build/lcom-unittest
 ```
 
 ### Full build command
@@ -206,7 +216,7 @@ bash osc.sh
 #### ACATS
 
 ROSE is designed to support Ada 95, so we use the associated ACATS version, 2.6.
-`acats.sh` can be used to download and process the source into `testcases/acats`.
+[`acats.sh`](acats.sh) can be used to download and process the source into `testcases/acats`.
 
 #### Open-source code
 
@@ -228,7 +238,7 @@ A collection of open source code that uses the Ada 95 language.
 | [SHA-1](https://github.com/UlrikHjort/SHA-1)                                          | 498               |
 | [Ada KALINDA OS](https://sourceforge.net/projects/sx-ada-kalinda/)                    | 20,383            |
 
-To download the source into `testcases/osc`, run `osc.sh`
+To download the source into `testcases/osc`, run [`osc.sh`](osc.sh)
 This will download all of the projects in parallel.
 
 #### simple-cpp-programs
@@ -326,7 +336,7 @@ Anything with a distinct [scope](https://perso.telecom-paristech.fr/pautet/Ada95
 We elected to use the same eligible local program units chosen by [GNATmetric](https://www.adacore.com/static-analysis/gnatmetric) as our class types: packages, functions/procedures/subprograms, and protected objects.
 GNATmetric also evaluates tasks.
 In this situation, entries are methods.
-However, these is no clear way for an entry to reference an attribute, so LCOM is not meaningful here.
+However, there is no clear way for an entry to reference an attribute, so LCOM is not meaningful here.
 
 ### Correctness, assumptions, and limitations
 
@@ -365,8 +375,8 @@ Work could be done to improve support for other languages.
 ### Experiment with nested access behavior
 Currently, all attribute and called method accesses are associated only with their immediate scope parent class.
 It would be interesting to see how LCOM changes if we associated that access with all parent classes, to handle nested classes.
-It would also be helpful to explore how [other LCOM tools](#related-works-and-resources) accommodate nesting.
-Once this is implemented, an associated test case should be made for [child.adb](testcases/other-tests/child.adb) to ensure it works properly.
+In an examination of [other LCOM tools](#related-works-and-resources), there was no clear consensus in whether or not to support this.
+If this is implemented, an associated test case should be made for [child.adb](testcases/other-tests/child.adb) to ensure it works properly.
 
 ### Associate attributes in a called method back to the caller
 When a method calls another method, it indirectly accesses all of the attributes within that called method.
@@ -378,10 +388,10 @@ LCOM5 currently counts the appearance of an attribute node as a single attribute
 However, when that attribute is a record, it has multiple fields associated with it, each of which can be seen as a separate attribute access for the purposes of LCOM5.
 It may be worth tracking the number of underlying fields associated with each record access to report a more accurate LCOM5 metric.
 
-### Ada - Handle a tagged type's methods
-Free-standing methods take the tagged type (a special kind of record) as the first argument, effectively making them methods associated with the tagged type "class", even though the tagged type is not part of the method's parent scope.
-The AST should already provide enough information to identify these methods and properly associate them with the owning tagged type.
-Once completed, a test case should be created for [p.adb](testcases/other-tests/p.adb)  in [lcom-unittest.cpp](src/lcom-unittest.cpp)to ensure tagged types are handled correctly.
+### Ada - Handle methods that reference multiple tagged types  
+Tagged types are supported by our tool, but they currently only work when a method specifies a single tagged type as a parameter.
+While this is the most common configuration, it is also possible to have multiple tagged types as parameters, essentially giving multiple classes ownership of a single method.
+This situation is not currently supported and may take a significant amount of refactoring to support correctly.
 
 ### Ada - Integrate with [Ada Analysis Toolkit](https://rosecompiler2.llnl.gov/gitlab/rose-tools/ada-analysis-toolkit)
 The Ada analysis toolkit is a useful visualization tool to evaluate a codebase.
