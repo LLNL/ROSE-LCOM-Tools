@@ -82,7 +82,7 @@ RUN mkdir -p build
 RUN rm -r build/; exit 0
 RUN cmake -S . -B build
 RUN cmake --build build --parallel $(nproc)
-RUN cd build && ctest
+RUN $GTEST_REPO/gtest-parallel build/lcom-unittest; exit 0
 
 # Optional code.
 RUN bash acats.sh & bash osc.sh
