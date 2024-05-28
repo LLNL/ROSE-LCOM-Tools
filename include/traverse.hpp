@@ -292,7 +292,7 @@ template <typename C>
 std::vector<C> GetRecords(SgNode* n) {
   namespace siada = SageInterface::Ada;
 
-  std::vector<C> owningClassIds;
+  LOG(DEBUG) << "Finding additional records for " << NPrint::p(n) << std::endl;
 
   // functor to store all type declarations associated with some function
   auto storeRecordAssociation =
@@ -334,6 +334,8 @@ std::vector<C> GetRecords(SgNode* n) {
     }
 #endif /* NEW_SIGNATURE_PROCESSING */
   }
+  LOG(DEBUG) << "Found " << owningClassIds.size() << " additional records for "
+             << NPrint::p(n) << std::endl;
   return owningClassIds;
 }
 
@@ -350,6 +352,7 @@ void GetClassIdsHelper(SgNode* n, std::vector<C>& owningClassIds,
 template <typename C>
 void GetClassIdsHelper(SgNode* n, std::vector<C>& owningClassIds,
                        std::false_type) {
+  LOG(DEBUG) << "No additional records to add." << std::endl;
   // Do nothing.
   return;
 }
@@ -400,8 +403,7 @@ bool IsClassOwner(SgExpression* id, const MType& mId) {
       // getname.
       if (classId->get_firstNondefiningDeclaration() ==
           classRefId->get_firstNondefiningDeclaration()) {
-        LOG(TRACE) << "Found a match for " << NPrint::p(classRefId)
-                   << std::endl;
+        LOG(TRACE) << "Match found for " << NPrint::p(classRefId) << std::endl;
         return true;
       }
     }
@@ -488,6 +490,26 @@ class Class : public Component<C> {
     os << NPrint::p(c.id);
     return os;
   }
+  // Filter attributes for non-tagged type classes.
+  void FilterAttributes(Method<C>* method, std::false_type) {
+    if (!method) return;
+    auto& attributes = method->attributes;
+    for (auto j = attributes.begin(); j != attributes.end();) {
+      const auto& attribute = std::get<1>(*j);
+      // Remove foreign attributes.
+      if (attribute->owningClass.GetId() != this->GetId()) {
+        LOG(DEBUG) << "Removing " << attribute << " from " << *this
+                   << " because " << NPrint::p(attribute->owningClass.GetId())
+                   << " != " << NPrint::p(this->GetId()) << std::endl;
+        j = attributes.erase(j);
+      } else {
+        ++j;
+      }
+    }
+  }
+  // Tagged types. Do nothing, for now.
+  void FilterAttributes(Method<C>* method, std::true_type) { return; }
+
   // Filter out class data we don't want in the final analysis.
   void Filter() {
     LOG(DEBUG) << "Filtering out foreign data for class " << *this << std::endl;
@@ -507,20 +529,11 @@ class Class : public Component<C> {
         ++i;
       }
 
-      auto& attributes = method->attributes;
-      for (auto j = attributes.begin(); j != attributes.end();) {
-        const auto& attribute = std::get<1>(*j);
+      // TODO: This is a hack. The right way to do this is to recognize that an
+      // attribute could be associated with multiple classes and track them all.
+      // For now, we will keep it disabled for tagged types analysis.
+      FilterAttributes(method, std::is_same<C, SgClassDeclaration*>());
 
-        // Remove foreign attributes.
-        if (attribute->owningClass.GetId() != this->GetId()) {
-          LOG(DEBUG) << "Removing " << attribute << " from " << *this
-                     << " because " << NPrint::p(attribute->owningClass.GetId())
-                     << " != " << NPrint::p(this->GetId()) << std::endl;
-          j = attributes.erase(j);
-        } else {
-          ++j;
-        }
-      }
       auto& calledMethods = method->calledMethods;
       for (auto j = calledMethods.begin(); j != calledMethods.end();) {
         const auto& cmId = std::get<0>(*j);
@@ -809,6 +822,7 @@ T GetBaseRootExp(SgExpression* id) {
 
 template <typename C>
 Class<C>* GetOwningClass(SgNode* n) {
+  LOG(TRACE) << "Getting Owning Class for " << NPrint::p(n) << std::endl;
   const std::vector<C> owningClassIds = GetClassIds<C>(n);
 
   // TODO: Not a safe assumption, but we will see how much damage this causes.
@@ -956,6 +970,60 @@ class VisitorTraversal : public AstTopDownProcessing<IA<C>> {
     return IA<C>(ia);
   }
 
+  // TODO: Actually use this to store additional classes associated with an
+  // attribute.
+  static bool HandleSgVarRefExpTaggedTypeHelper(Class<C>& owningClass,
+                                                AType aDecl, std::true_type) {
+    LOG(TRACE) << "Attempting to find all inherited classes associated with "
+               << owningClass << "." << std::endl;
+    // Associate the attribute with all classes in the tagged type hierarchy.
+    if (SgClassDeclaration* classDeclId =
+            is<SgClassDeclaration>(owningClass.GetId())) {
+      SgClassDefinition* classDefId = classDeclId->get_definition();
+      if (!classDefId) {
+        LOG(WARNING) << "classDefId for " << NPrint::p(classDeclId)
+                     << " was NULL. Ignoring." << std::endl;
+        return false;
+      }
+      const std::vector<SgBaseClass*> inheritanceList =
+          classDefId->get_inheritances();
+      for (const auto& inherit : inheritanceList) {
+        SgClassDeclaration* baseClassDecl = inherit->get_base_class();
+        // NOTE: Currently ignoring discriminated types. We can deal with it
+        // later.
+        if (baseClassDecl) {
+          Class<C>& baseClass = IA<C>::classData.at(baseClassDecl);
+          bool success =
+              IA<C>::attributeData
+                  .emplace(aDecl, std::move(Attribute<C>(aDecl, baseClass)))
+                  .second;
+          if (!success) {
+            LOG(WARNING) << "Failed to emplace." << std::endl;
+          }
+        }
+      }
+    }
+    return true;
+  }
+
+  static bool HandleSgVarRefExpTaggedTypeHelper(Class<C>& owningClass,
+                                                AType aDecl, std::false_type) {
+    return true;
+  }
+
+  // For tagged types.
+  static Class<C>* HandleSgVarRefExpGetClass(SgVarRefExp* baseRootExp,
+                                             Method<C>& owningMethod,
+                                             std::true_type) {
+    return &owningMethod.owningClass;
+  }
+  // For everything else.
+  static Class<C>* HandleSgVarRefExpGetClass(SgVarRefExp* baseRootExp,
+                                             Method<C>& owningMethod,
+                                             std::false_type) {
+    return GetOwningClass<C>(baseRootExp);
+  }
+
   static IA<C> HandleSgVarRefExp(SgExpression* id, IA<C> ia) {
     // Get the root expression. This resolves renamings, fields, and pointers.
     std::vector<SgExpression*> root = GetRootExp(id);
@@ -964,15 +1032,15 @@ class VisitorTraversal : public AstTopDownProcessing<IA<C>> {
     // PP 05/13/24 added null test
     if (baseRootExp == nullptr) return IA<C>(ia);
 
-    Class<C>* cPtr = GetOwningClass<C>(baseRootExp);
-    if (!cPtr) return IA<C>(ia);
-    Class<C>& owningClass = *cPtr;
-
     Method<C>* mPtr = GetOwningMethod<C>(baseRootExp);
     if (!mPtr) return IA<C>(ia);
     Method<C>& owningMethod = *mPtr;
 
-    // Class<C>& owningClass = owningMethod.owningClass;
+    // Class<C>* cPtr = GetOwningClass<C>(baseRootExp);
+    Class<C>* cPtr = HandleSgVarRefExpGetClass(
+        baseRootExp, owningMethod, std::is_same<C, SgClassDeclaration*>());
+    if (!cPtr) return IA<C>(ia);
+    Class<C>& owningClass = *cPtr;
 
     std::vector<AType::T> decl = AType::ToAttrList(root);
 
@@ -1006,6 +1074,8 @@ class VisitorTraversal : public AstTopDownProcessing<IA<C>> {
         }
         // Build up a vector of all records leading to this specific field in
         // a record.
+        // TODO: Figure out why tagged types repeat the same attribute ID twice
+        // in the list.
         do {
           SgExpression* rhs = parent->get_rhs_operand();
           std::vector<SgExpression*> exps = GetRootExp(rhs);
@@ -1031,6 +1101,10 @@ class VisitorTraversal : public AstTopDownProcessing<IA<C>> {
                  << " already in attributeData. Likely inserted preemptively "
                     "by HandleSgAdaRenamingDecl(). This is not a problem."
                  << std::endl;
+
+    // HandleSgVarRefExpTaggedTypeHelper(owningClass, aDecl,
+    //                                   std::is_same<C,
+    //                                   SgClassDeclaration*>());
 
     // Associate it with the calling method.
     success =
