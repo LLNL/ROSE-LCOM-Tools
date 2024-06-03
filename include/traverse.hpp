@@ -776,9 +776,17 @@ std::vector<SgExpression*> GetRootExp(SgExpression* exp) {
     return GetRootExp(pare->get_lhs_operand());
   }
 
+  if (SgAdaAttributeExp* attr = is<SgAdaAttributeExp>(exp)) {
+    return GetRootExp(attr->get_object());
+  }
+
   //
   if (SgCastExp* castexp = is<SgCastExp>(exp)) {
     return GetRootExp(castexp->get_operand());
+  }
+
+  if (/*SgTypeExpression* typeex =*/ is<SgTypeExpression>(exp)) {
+    return {};
   }
 
   // PP: 05/13/24 not sure how to handle function calls..
