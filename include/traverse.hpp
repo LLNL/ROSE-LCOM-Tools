@@ -294,6 +294,8 @@ std::vector<C> GetRecords(SgNode* n) {
 
   LOG(DEBUG) << "Finding additional records for " << NPrint::p(n) << std::endl;
 
+  std::vector<C> owningClassIds;
+
   // functor to store all type declarations associated with some function
   auto storeRecordAssociation =
        [&owningClassIds,n]
