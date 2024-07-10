@@ -1266,13 +1266,12 @@ class RenamingTraversal : public AstTopDownProcessing<IA<C>> {
     if (SgSourceFile* sf = is<SgSourceFile>(n)) {
       LOG(INFO) << "Handling SgSourceFile " << NPrint::p(sf) << std::endl;
       return HandleSourceFile(sf, ia);
+    } else if (SgNamespaceDeclarationStatement* ns = is<SgNamespaceDeclarationStatement>(n)) {
+      LOG(INFO) << "Handling SgNamespaceDeclarationStatement " << NPrint::p(ns) << std::endl;
+      C c = is<C>(ns->get_firstNondefiningDeclaration());
+      return HandleClass(c, ia);
     } else if (C c = is<C>(n)) {
       LOG(INFO) << "Handling C " << NPrint::p(c) << std::endl;
-      if (SgNamespaceDeclarationStatement* ns = is<SgNamespaceDeclarationStatement>(n)) {
-        LOG(INFO) << "Handling SgNamespaceDeclarationStatement " << NPrint::p(ns) << std::endl;
-        C c = is<C>(ns->get_firstNondefiningDeclaration());
-        return HandleClass(c, ia);
-      }
       return HandleClass(c, ia);
     } else if (SgAdaRenamingDecl* ard = is<SgAdaRenamingDecl>(n)) {
       LOG(INFO) << "Handling SgAdaRenamingDecl " << NPrint::p(ard) << std::endl;
@@ -1301,12 +1300,12 @@ const std::vector<LCOM::Class<C, MType, AType>> GetClassData(
   // Start by finding attribute renamings in a first pass.
   LOG(INFO) << "Starting renaming traversal." << std::endl;
   RenamingTraversal<C> rTraversal;
-  rTraversal.traverse(project, ia);
+  rTraversal.traverseInputFiles(project, ia);
 
   // Now perform the main traversal.
   LOG(INFO) << "Starting visitor traversal." << std::endl;
   VisitorTraversal<C> vTraversal;
-  vTraversal.traverse(project, ia);
+  vTraversal.traverseInputFiles(project, ia);
 
   // Convert node data into a format accepted by LCOM.
   std::vector<LCOM::Class<C, MType, AType>> dataLCOM;
