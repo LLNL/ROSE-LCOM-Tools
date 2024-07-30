@@ -446,6 +446,23 @@ class Class : public Component<C> {
     for (auto i = methods.begin(); i != methods.end();) {
       const auto& method = std::get<1>(*i);
 
+      // Remove undefined methods
+      if (method->GetId()->get_definingDeclaration() == nullptr) {
+        LOG(DEBUG) << "Removing " << NPrint::p(method->GetId()) << " from " << *this
+                   << " because it is undefined." << std::endl;
+        i = methods.erase(i);
+        continue;
+      }
+
+      // Remove constructors and destructors.
+      if (method->GetId()->get_specialFunctionModifier().isConstructor()
+      ||  method->GetId()->get_specialFunctionModifier().isDestructor()) {
+        LOG(DEBUG) << "Removing " << NPrint::p(method->GetId()) << " from " << *this
+                   << " because it is a constructor/destructor." << std::endl;
+        i = methods.erase(i);
+        continue;
+      }
+
       // Remove foreign methods.
       if (method->owningClass.GetId() != this->GetId()) {
         LOG(DEBUG) << "Removing " << method << " from " << *this << " because "
@@ -1266,11 +1283,12 @@ class RenamingTraversal : public AstTopDownProcessing<IA<C>> {
     if (SgSourceFile* sf = is<SgSourceFile>(n)) {
       LOG(INFO) << "Handling SgSourceFile " << NPrint::p(sf) << std::endl;
       return HandleSourceFile(sf, ia);
-    } else if (SgNamespaceDeclarationStatement* ns = is<SgNamespaceDeclarationStatement>(n)) {
-      LOG(INFO) << "Handling SgNamespaceDeclarationStatement " << NPrint::p(ns) << std::endl;
-      C c = is<C>(ns->get_firstNondefiningDeclaration());
-      return HandleClass(c, ia);
     } else if (C c = is<C>(n)) {
+      // TODO: Zach: This is a hack to check if n is a namespace. We cannot call get_firstNondefiningDeclaration()
+      // on C, so we must try converting it to a namespace using is<>(), then convert it back to type C. 
+      if (SgNamespaceDeclarationStatement* ns = is<SgNamespaceDeclarationStatement*>(n)) {
+        c = is<C>(ns->get_firstNondefiningDeclaration());
+      }
       LOG(INFO) << "Handling C " << NPrint::p(c) << std::endl;
       return HandleClass(c, ia);
     } else if (SgAdaRenamingDecl* ard = is<SgAdaRenamingDecl>(n)) {

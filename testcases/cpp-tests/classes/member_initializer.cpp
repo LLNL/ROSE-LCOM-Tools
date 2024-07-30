@@ -17,5 +17,5 @@ class myClass
 };
 
 
-// Expected LCOM4 = 1
-// Result from tool: LCOM4 = 3 // TODO: test failed
+// Expected LCOM4 = 0 if constructors are not counted, 1 otherwise
+// Result from tool: LCOM4 = 0

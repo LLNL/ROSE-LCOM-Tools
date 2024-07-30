@@ -16,9 +16,13 @@ class myClass
 int main()
 {
     myClass<int> obj;
+    obj.methodOne();
+    obj.methodTwo();
     return 1;
 }
 
 // ROSE generates an additional node for the template class instantiation
+// Method definitions only appear in the tree if they are called on the instantiated object
+
 // Expected LCOM4 = 1 for declaration, 1 for instantiation
-// Result from tool: LCOM4 = 1 for declaration, 2 for instantiation //TODO: test failed
+// Result from tool: LCOM4 = 1 for declaration, 1 for instantiation
