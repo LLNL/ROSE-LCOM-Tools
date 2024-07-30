@@ -16,3 +16,6 @@ namespace myNamespace
             }
     };
 }
+
+// Expected LCOM4 = 2 for myClass, 2 for myNamespace
+// Result from tool: LCOM4 = 2 for myClass, 2 for myNamespace
