@@ -447,20 +447,24 @@ class Class : public Component<C> {
       const auto& method = std::get<1>(*i);
 
       // Remove undefined methods
-      if (method->GetId()->get_definingDeclaration() == nullptr) {
-        LOG(DEBUG) << "Removing " << NPrint::p(method->GetId()) << " from " << *this
-                   << " because it is undefined." << std::endl;
-        i = methods.erase(i);
-        continue;
+      if (filterUndefinedMethods) {
+        if (method->GetId()->get_definingDeclaration() == nullptr) {
+          LOG(DEBUG) << "Removing " << NPrint::p(method->GetId()) << " from " << *this
+                    << " because it is undefined." << std::endl;
+          i = methods.erase(i);
+          continue;
+        }
       }
 
       // Remove constructors and destructors.
-      if (method->GetId()->get_specialFunctionModifier().isConstructor()
-      ||  method->GetId()->get_specialFunctionModifier().isDestructor()) {
-        LOG(DEBUG) << "Removing " << NPrint::p(method->GetId()) << " from " << *this
-                   << " because it is a constructor/destructor." << std::endl;
-        i = methods.erase(i);
-        continue;
+      if (filterCtorsDtors) {
+        if (method->GetId()->get_specialFunctionModifier().isConstructor()
+        ||  method->GetId()->get_specialFunctionModifier().isDestructor()) {
+          LOG(DEBUG) << "Removing " << NPrint::p(method->GetId()) << " from " << *this
+                    << " because it is a constructor/destructor." << std::endl;
+          i = methods.erase(i);
+          continue;
+        }
       }
 
       // Remove foreign methods.
