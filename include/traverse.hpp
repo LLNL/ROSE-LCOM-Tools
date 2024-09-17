@@ -1151,6 +1151,80 @@ class VisitorTraversal : public AstTopDownProcessing<IA<C>> {
     return IA<C>(ia);
   }
 
+  // Handles a C++ member initializer list. The initialized variables must be associated back to
+  // the owning method, which in this case is a constructor. Member initializers access attributes
+  // without creating an SgVarRefExp node. In order to associate the initialized variables with the
+  // owning method, we must traverse the children of the SgCtorInitializerList node.
+  static IA<C> HandleSgCtorInitializerList(SgCtorInitializerList* cil, IA<C> ia) {
+    Class<C>* cPtr = GetOwningClass<C>(cil);
+    if (!cPtr) return IA<C>(ia);
+    Class<C>& owningClass = *cPtr;
+
+    Method<C>* mPtr = GetOwningMethod<C>(cil);
+    if (!mPtr) return IA<C>(ia);
+    Method<C>& owningMethod = *mPtr;
+
+    SgClassDeclaration* classDecl = is<SgClassDeclaration>(owningClass.GetId());
+    if (!classDecl) {
+      LOG(DEBUG) << "Ignoring SgCtorInitializerList* " << NPrint::p(cil)
+                 << " because it is not associated with a class declaration";
+      return IA<C>(ia);
+    }
+    SgClassDefinition* classDef = classDecl->get_definition();
+    SgInitializedName* decl;
+    for (SgInitializedName* child : cil->get_ctors())
+    {
+      LOG(INFO) << "Handling SgInitializedName " << NPrint::p(child) << std::endl;
+      
+      // Find the original SgInitializedName for the child.
+      for (SgDeclarationStatement* cand : classDef->get_members())
+      {
+        if (SgVariableDeclaration* dcl = isSgVariableDeclaration(cand))
+        {
+          for (SgInitializedName* var : dcl->get_variables())
+          {
+            if (var->get_name() == child->get_name())
+            {
+              decl = var;
+              break;
+            }
+          }
+        }
+      }
+
+      if (!decl) {
+        LOG(FATAL) << "Could not find the original SgInitializedName for " << NPrint::p(child) << std::endl;
+        continue;
+      }
+
+      // Convert the decl to a proper AType.
+      AType aDecl(decl);
+
+      // Make sure the associated attribute exists in attributeData.
+      bool success =
+          IA<C>::attributeData
+              .emplace(aDecl, std::move(Attribute<C>(aDecl, owningClass)))
+              .second;
+      if (!success)
+        LOG(DEBUG) << aDecl
+                  << " already in attributeData. Likely inserted preemptively "
+                      "by HandleSgAdaRenamingDecl(). This is not a problem."
+                  << std::endl;
+
+      // Associate it with the calling method.
+      success =
+          owningMethod.attributes.emplace(aDecl, &IA<C>::attributeData.at(aDecl))
+              .second;
+      if (!success)
+        LOG(DEBUG) << "attribute " << aDecl << " already in method "
+                  << owningMethod << std::endl;
+
+      LOG(DEBUG) << IA<C>::printAttributeData() << std::endl;
+    }
+
+    return IA<C>(ia);
+  }
+
  public:
   IA<C> evaluateInheritedAttribute(SgNode* n, IA<C> ia) {
     if (MType m = is<MType>(n)) {
@@ -1169,6 +1243,9 @@ class VisitorTraversal : public AstTopDownProcessing<IA<C>> {
     } else if (SgExpression* e = is<SgExpression>(n)) {
       LOG(INFO) << "Handling SgExpression " << NPrint::p(e) << std::endl;
       return HandleExpression(e, ia);
+    } else if (SgCtorInitializerList* cil = is<SgCtorInitializerList>(n)) {
+      LOG(INFO) << "Handling SgCtorInitializerList " << NPrint::p(cil) << std::endl;
+      return HandleSgCtorInitializerList(cil, ia);
     }
     return IA<C>(ia);
   }
@@ -1288,8 +1365,6 @@ class RenamingTraversal : public AstTopDownProcessing<IA<C>> {
       LOG(INFO) << "Handling SgSourceFile " << NPrint::p(sf) << std::endl;
       return HandleSourceFile(sf, ia);
     } else if (C c = is<C>(n)) {
-      // TODO: Zach: This is a hack to check if n is a namespace. We cannot call get_firstNondefiningDeclaration()
-      // on C, so we must try converting it to a namespace using is<>(), then convert it back to type C. 
       if (SgNamespaceDeclarationStatement* ns = is<SgNamespaceDeclarationStatement*>(n)) {
         c = is<C>(ns->get_firstNondefiningDeclaration());
       }
