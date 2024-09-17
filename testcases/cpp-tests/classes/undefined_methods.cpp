@@ -17,5 +17,5 @@ class myClass
 };
 
 
-// Expected LCOM4 = 1
-// Result from tool: LCOM4 = 1
+// Expected LCOM4 = 1 if --filter-undefined-methods is set, 4 otherwise
+// Result from tool: LCOM4 = 1, 4

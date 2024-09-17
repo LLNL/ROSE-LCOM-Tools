@@ -16,6 +16,5 @@ class myClass
         }
 };
 
-
 // Expected LCOM4 = 1
 // Result from tool: LCOM4 = 1
