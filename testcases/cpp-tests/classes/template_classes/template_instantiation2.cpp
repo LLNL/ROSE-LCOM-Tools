@@ -24,4 +24,4 @@ int main()
 // If methods go uncalled, they should be filtered out prior to LCOM4 calculation
 
 // Expected LCOM4 = 1 for declaration, 0 for instantiation (class should be empty)
-// Result from tool: LCOM4 = 1 for declaration, 2 for instantiation TODO: test failed
+// Result from tool: LCOM4 = 1 for declaration, 0 if --filter-undefined-methods is set, 2 otherwise

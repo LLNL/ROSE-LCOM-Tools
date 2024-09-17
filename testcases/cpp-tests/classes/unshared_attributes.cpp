@@ -15,6 +15,5 @@ class myClass
 
 };
 
-
-// Access to different attributes: LCOM4 = 2
+// Expected LCOM4 = 2
 // Result from tool: LCOM4 = 2

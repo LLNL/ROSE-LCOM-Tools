@@ -8,11 +8,11 @@ class myClass
         {
         }
 
-        myClass(int i, int j) : item(i), item2(j)
+        myClass(int i) : item2(i)
         {
         }
 };
 
 
-// Expected LCOM4 = 2
-// Result from tool: LCOM4 = 2 // TODO: test failed (despite accurate result)
+// Expected LCOM4 = null if --filter-ctors-dtors, 2 otherwise
+// Result from tool: LCOM4 = null, 2
