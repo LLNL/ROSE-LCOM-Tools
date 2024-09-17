@@ -89,6 +89,14 @@ std::tuple<std::vector<std::string>, Settings> parseArgs(
                    "The program unit to use as the LCOM class. \"All\" will "
                    "run analysis on all predefined class types. Defaults to ") +
                typeid(Class).name() + "."));
+  lcomArgs.insert(
+      scl::Switch("filter-undefined-methods")
+          .intrinsicValue("true", scl::booleanParser(filterUndefinedMethods))
+          .doc("Filter out methods that are not defined."));
+  lcomArgs.insert(
+      scl::Switch("filter-ctors-dtors")
+          .intrinsicValue("true", scl::booleanParser(filterCtorsDtors))
+          .doc("Filter out constructors and destructors."));
   scl::ParserResult cmdline = p.with(lcomArgs).parse(args).apply();
 
   // Initialize the logger here.

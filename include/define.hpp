@@ -77,6 +77,8 @@ std::ostream& operator<<(std::ostream& os, const ClassType& c) {
 // Global options set via command line.
 AixLog::Severity debug = AixLog::Severity::fatal;
 bool anonymous = false;
+bool filterUndefinedMethods = false;
+bool filterCtorsDtors = false;
 DotBehavior dotBehavior = DotBehavior::LeftOnly;
 
 #endif  // DEFINE_HPP
