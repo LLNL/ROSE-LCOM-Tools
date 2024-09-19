@@ -1171,7 +1171,7 @@ class VisitorTraversal : public AstTopDownProcessing<IA<C>> {
       return IA<C>(ia);
     }
     SgClassDefinition* classDef = classDecl->get_definition();
-    SgInitializedName* decl;
+    SgInitializedName* decl = nullptr;
     for (SgInitializedName* child : cil->get_ctors())
     {
       LOG(INFO) << "Handling SgInitializedName " << NPrint::p(child) << std::endl;
@@ -1193,7 +1193,7 @@ class VisitorTraversal : public AstTopDownProcessing<IA<C>> {
       }
 
       if (!decl) {
-        LOG(FATAL) << "Could not find the original SgInitializedName for " << NPrint::p(child) << std::endl;
+        LOG(INFO) << "Could not find the original SgInitializedName for " << NPrint::p(child) << std::endl;
         continue;
       }
 
