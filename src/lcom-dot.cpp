@@ -380,6 +380,9 @@ int main(int argc, char* argv[]) {
     case ClassType::ProtectedObject:
       GenerateLCOMGraphs<SgAdaProtectedSpec*>(project, settings);
       break;
+    case ClassType::Namespace:
+      GenerateLCOMGraphs<SgNamespaceDeclarationStatement*>(project, settings);
+      break;
     case ClassType::Default:
       LOG(INFO) << "No/invalid class type specified. Running analysis on "
                    "default type, "
@@ -391,6 +394,7 @@ int main(int argc, char* argv[]) {
       GenerateLCOMGraphs<SgFunctionDeclaration*>(project, settings);
       GenerateLCOMGraphs<SgClassDeclaration*>(project, settings);
       GenerateLCOMGraphs<SgAdaProtectedSpec*>(project, settings);
+      GenerateLCOMGraphs<SgNamespaceDeclarationStatement*>(project, settings);
   }
 
   return 0;
