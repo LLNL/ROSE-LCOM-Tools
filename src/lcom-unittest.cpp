@@ -51,6 +51,7 @@ struct LCOMClassData {
   boost::optional<LCOMData> PackageData = boost::none;
   boost::optional<LCOMData> ProtectedData = boost::none;
   boost::optional<LCOMData> ClassData = boost::none;
+  boost::optional<LCOMData> NamespaceData = boost::none;
 
   // Generate the test name.
   static std::string PrintTo(
@@ -77,6 +78,8 @@ class LCOMTest : public ::testing::TestWithParam<LCOMClassData> {
       LCOMInputProtected;
   std::vector<LCOM::Class<SgClassDeclaration*, Method, Attribute>>
       LCOMInputClass;
+  std::vector<LCOM::Class<SgNamespaceDeclarationStatement*, Method, Attribute>>
+      LCOMInputNamespace;
 
   void SetUpProject(const boost::filesystem::path& source, DotBehavior dot) {
     std::vector<std::string> cmdLineArgs{EXEC.string(), source.string()};
@@ -126,6 +129,10 @@ TEST_P(LCOMTest, CheckClass) {
   if (exp.ClassData != boost::none) {
     LCOMInputClass = Traverse::GetClassData<SgClassDeclaration*>(project);
     CheckLCOMInput(LCOMInputClass, *(exp.ClassData));
+  }
+  if (exp.NamespaceData != boost::none) {
+    LCOMInputNamespace = Traverse::GetClassData<SgNamespaceDeclarationStatement*>(project);
+    CheckLCOMInput(LCOMInputNamespace, *(exp.NamespaceData));
   }
   return;
 }
@@ -750,3 +757,19 @@ INSTANTIATE_TEST_SUITE_P(
                     // TODO: Not seeing A in this class for some reason. I think it's because my code isn't designed to accomodate an attribute existing in multiple classes.
                     .data5{.a = 2, .l = 2, .k = 1}}}}}}),
     LCOMClassData::PrintTo);
+INSTANTIATE_TEST_SUITE_P(
+    CPPTests, LCOMTest,
+    ::testing::Values(
+        LCOMClassData{
+            .source = TESTS / "cpp-tests/namespaces/single_translation_unit/samefile.cpp",
+            .dot = DotBehavior::Full,
+            .NamespaceData{LCOMData{.classes{LCOMData::LCOMClass{
+                .LCOM1 = 0,
+                .LCOM2 = 0,
+                .LCOM3 = 1,
+                .LCOM4 = 1,
+                .LCOM5 = (double).5,
+                .data1{.sharedPairs = 1, .unsharedPairs = 0, .totalPairs = 1},
+                .data5{.a = 3, .l = 2, .k = 2}}}}}}),
+    LCOMClassData::PrintTo);
+    
