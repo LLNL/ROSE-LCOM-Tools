@@ -24,5 +24,3 @@ class myClass
 // Access to otherClass doesn't count as shared attributes: LCOM4 = 2
 // Access to otherClass does count as shared attributes: LCOM4 = 1
 // Result from tool: LCOM4 = 1
-
-// TODO: Follow up on this

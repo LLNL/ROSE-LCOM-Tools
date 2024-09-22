@@ -3,6 +3,7 @@ class myClass
     public:
         int item;
         float item2;
+        double item3;
 
         int methodOne() {
             return item;
@@ -12,8 +13,10 @@ class myClass
             return item2;
         }
 
-
+        double methodThree() {
+            return item3;
+        }
 };
 
-// Expected LCOM4 = 2
-// Result from tool: LCOM4 = 2
+// Expected LCOM4 = 3
+// Result from tool: LCOM4 = 3
