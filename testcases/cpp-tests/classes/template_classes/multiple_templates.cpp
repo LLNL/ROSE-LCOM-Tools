@@ -1,22 +1,3 @@
-class Y;
-class Z;
-class XX;
-
-template < class XX > class X
-{
-    public:
-        XX item;
-        XX item2;
-
-        XX methodOne() {
-            return item;
-        }
-
-        XX methodTwo() {
-            return item2;
-        }
-};
-
 template < class X, class Y, class Z > class myClass
 {
     public:

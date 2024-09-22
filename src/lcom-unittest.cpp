@@ -48,6 +48,7 @@ struct LCOMData {
 struct LCOMClassData {
   boost::filesystem::path source;
   DotBehavior dot;
+  bool filterUndefinedMethods = false;
   boost::optional<LCOMData> PackageData = boost::none;
   boost::optional<LCOMData> ProtectedData = boost::none;
   boost::optional<LCOMData> ClassData = boost::none;
@@ -81,9 +82,10 @@ class LCOMTest : public ::testing::TestWithParam<LCOMClassData> {
   std::vector<LCOM::Class<SgNamespaceDeclarationStatement*, Method, Attribute>>
       LCOMInputNamespace;
 
-  void SetUpProject(const boost::filesystem::path& source, DotBehavior dot) {
+  void SetUpProject(const boost::filesystem::path& source, DotBehavior dot, bool filterUndefined) {
     std::vector<std::string> cmdLineArgs{EXEC.string(), source.string()};
     dotBehavior = dot;
+    filterUndefinedMethods = filterUndefined;
     project = Traverse::GetProject(cmdLineArgs);
   }
 };
@@ -117,7 +119,7 @@ void CheckLCOMInput(const std::vector<LCOM::Class<C, Method, Attribute>>& input,
 
 TEST_P(LCOMTest, CheckClass) {
   LCOMClassData exp = GetParam();
-  SetUpProject(exp.source, exp.dot);
+  SetUpProject(exp.source, exp.dot, exp.filterUndefinedMethods);
   if (exp.PackageData != boost::none) {
     LCOMInputPackage = Traverse::GetClassData<SgAdaPackageSpec*>(project);
     CheckLCOMInput(LCOMInputPackage, *(exp.PackageData));
@@ -770,6 +772,217 @@ INSTANTIATE_TEST_SUITE_P(
                 .LCOM4 = 1,
                 .LCOM5 = (double).5,
                 .data1{.sharedPairs = 1, .unsharedPairs = 0, .totalPairs = 1},
-                .data5{.a = 3, .l = 2, .k = 2}}}}}}),
+                .data5{.a = 3, .l = 2, .k = 2}}}}}}, 
+        LCOMClassData{
+            .source = TESTS / "cpp-tests/namespaces/nested/outer_accesses_inner.cpp",
+            .dot = DotBehavior::Full,
+            .NamespaceData{LCOMData{.classes{
+                LCOMData::LCOMClass{
+                    .LCOM1 = 1,
+                    .LCOM2 = 1,
+                    .LCOM3 = 2,
+                    .LCOM4 = 2,
+                    .LCOM5 = std::numeric_limits<double>::quiet_NaN(),
+                    .data1{.sharedPairs = 0, .unsharedPairs = 1, .totalPairs = 1},
+                    .data5{.a = 0, .l = 0, .k = 2}},
+                LCOMData::LCOMClass{
+                    .LCOM1 = 1,
+                    .LCOM2 = 1,
+                    .LCOM3 = 2,
+                    .LCOM4 = 2,
+                    .LCOM5 = 1,
+                    .data1{.sharedPairs = 0, .unsharedPairs = 1, .totalPairs = 1},
+                    .data5{.a = 2, .l = 2, .k = 2}}}}}},
+        LCOMClassData{
+            .source = TESTS / "cpp-tests/inheritance/inherited_lcom.cpp",
+            .dot = DotBehavior::Full,
+            .ClassData{LCOMData{.classes{
+                LCOMData::LCOMClass{
+                    .LCOM1 = 1,
+                    .LCOM2 = 1,
+                    .LCOM3 = 2,
+                    .LCOM4 = 2,
+                    .LCOM5 = (double)1,
+                    .data1{.sharedPairs = 0, .unsharedPairs = 1, .totalPairs = 1},
+                    .data5{.a = 2, .l = 2, .k = 2}},
+                LCOMData::LCOMClass{
+                    .LCOM1 = 0,
+                    .LCOM2 = 0,
+                    .LCOM3 = 1,
+                    .LCOM4 = 1,
+                    .LCOM5 = std::numeric_limits<double>::quiet_NaN(),
+                    .data1{.sharedPairs = 0, .unsharedPairs = 0, .totalPairs = 0},
+                    .data5{.a = 1, .l = 1, .k = 1}}}}}},
+        LCOMClassData{
+            .source = TESTS / "cpp-tests/inheritance/multiple_inheritance.cpp",
+            .dot = DotBehavior::Full,
+            .ClassData{LCOMData{.classes{
+                LCOMData::LCOMClass{
+                    .LCOM1 = 0,
+                    .LCOM2 = 0,
+                    .LCOM3 = 1,
+                    .LCOM4 = 1,
+                    .LCOM5 = std::numeric_limits<double>::quiet_NaN(),
+                    .data1{.sharedPairs = 0, .unsharedPairs = 0, .totalPairs = 0},
+                    .data5{.a = 1, .l = 1, .k = 1}},
+                LCOMData::LCOMClass{
+                    .LCOM1 = 0,
+                    .LCOM2 = 0,
+                    .LCOM3 = 1,
+                    .LCOM4 = 1,
+                    .LCOM5 = std::numeric_limits<double>::quiet_NaN(),
+                    .data1{.sharedPairs = 0, .unsharedPairs = 0, .totalPairs = 0},
+                    .data5{.a = 1, .l = 1, .k = 1}},
+                LCOMData::LCOMClass{
+                    .LCOM1 = 0,
+                    .LCOM2 = 0,
+                    .LCOM3 = 1,
+                    .LCOM4 = 1,
+                    .LCOM5 = std::numeric_limits<double>::quiet_NaN(),
+                    .data1{.sharedPairs = 0, .unsharedPairs = 0, .totalPairs = 0},
+                    .data5{.a = 1, .l = 1, .k = 1}}}}}},
+        LCOMClassData{
+            .source = TESTS / "cpp-tests/inheritance/header_files_template_class/main.cpp",
+            .dot = DotBehavior::Full,
+            .ClassData{LCOMData{.classes{LCOMData::LCOMClass{
+                .LCOM1 = 0,
+                .LCOM2 = 0,
+                .LCOM3 = 1,
+                .LCOM4 = 1,
+                .LCOM5 = 0,
+                .data1{.sharedPairs = 1, .unsharedPairs = 0, .totalPairs = 1},
+                .data5{.a = 2, .l = 1, .k = 2}}}}}},
+        LCOMClassData{
+            .source = TESTS / "cpp-tests/classes/class_access.cpp",
+            .dot = DotBehavior::Full,
+            .ClassData{LCOMData{.classes{LCOMData::LCOMClass{
+                .LCOM1 = 0,
+                .LCOM2 = 0,
+                .LCOM3 = 1,
+                .LCOM4 = 1,
+                .LCOM5 = 0,
+                .data1{.sharedPairs = 1, .unsharedPairs = 0, .totalPairs = 1},
+                .data5{.a = 2, .l = 1, .k = 2}}}}}},
+        LCOMClassData{
+            .source = TESTS / "cpp-tests/classes/member_initializer.cpp",
+            .dot = DotBehavior::Full,
+            .ClassData{LCOMData{.classes{LCOMData::LCOMClass{
+                .LCOM1 = 3,
+                .LCOM2 = 0,
+                .LCOM3 = 2,
+                .LCOM4 = 2,
+                .LCOM5 = (double)2 / (double)3,
+                .data1{.sharedPairs = 3, .unsharedPairs = 3, .totalPairs = 6},
+                .data5{.a = 4, .l = 2, .k = 4}}}}}},
+        LCOMClassData{
+            .source = TESTS / "cpp-tests/classes/multiple_constructor.cpp",
+            .dot = DotBehavior::Full,
+            .ClassData{LCOMData{.classes{LCOMData::LCOMClass{
+                .LCOM1 = 3,
+                .LCOM2 = 0,
+                .LCOM3 = 2,
+                .LCOM4 = 2,
+                .LCOM5 = (double)2 / (double)3,
+                .data1{.sharedPairs = 3, .unsharedPairs = 3, .totalPairs = 6},
+                .data5{.a = 4, .l = 2, .k = 4}}}}}},
+        LCOMClassData{
+            .source = TESTS / "cpp-tests/classes/private.cpp",
+            .dot = DotBehavior::Full,
+            .ClassData{LCOMData{.classes{LCOMData::LCOMClass{
+                .LCOM1 = 2,
+                .LCOM2 = 1,
+                .LCOM3 = 2,
+                .LCOM4 = 2,
+                .LCOM5 = (double)3 / (double)4,
+                .data1{.sharedPairs = 1, .unsharedPairs = 2, .totalPairs = 3},
+                .data5{.a = 3, .l = 2, .k = 3}}}}}},
+        LCOMClassData{
+            .source = TESTS / "cpp-tests/classes/protected.cpp",
+            .dot = DotBehavior::Full,
+            .ClassData{LCOMData{.classes{LCOMData::LCOMClass{
+                .LCOM1 = 2,
+                .LCOM2 = 1,
+                .LCOM3 = 2,
+                .LCOM4 = 2,
+                .LCOM5 = (double)3 / (double)4,
+                .data1{.sharedPairs = 1, .unsharedPairs = 2, .totalPairs = 3},
+                .data5{.a = 3, .l = 2, .k = 3}}}}}},
+        LCOMClassData{
+            .source = TESTS / "cpp-tests/classes/undefined_methods.cpp",
+            .dot = DotBehavior::Full,
+            .filterUndefinedMethods = true,
+            .ClassData{LCOMData{.classes{LCOMData::LCOMClass{
+                .LCOM1 = 0,
+                .LCOM2 = 0,
+                .LCOM3 = 1,
+                .LCOM4 = 1,
+                .LCOM5 = 0,
+                .data1{.sharedPairs = 1, .unsharedPairs = 0, .totalPairs = 1},
+                .data5{.a = 2, .l = 1, .k = 2}}}}}},
+        LCOMClassData{
+            .source = TESTS / "cpp-tests/classes/unshared_attributes.cpp",
+            .dot = DotBehavior::Full,
+            .ClassData{LCOMData{.classes{LCOMData::LCOMClass{
+                .LCOM1 = 3,
+                .LCOM2 = 3,
+                .LCOM3 = 3,
+                .LCOM4 = 3,
+                .LCOM5 = 1,
+                .data1{.sharedPairs = 0, .unsharedPairs = 3, .totalPairs = 3},
+                .data5{.a = 3, .l = 3, .k = 3}}}}}},
+        LCOMClassData{
+            .source = TESTS / "cpp-tests/classes/template_classes/template_class.cpp",
+            .dot = DotBehavior::Full,
+            .ClassData{LCOMData{.classes{LCOMData::LCOMClass{
+                .LCOM1 = 4,
+                .LCOM2 = 2,
+                .LCOM3 = 2,
+                .LCOM4 = 2,
+                .LCOM5 = (double)2 / (double)3,
+                .data1{.sharedPairs = 2, .unsharedPairs = 4, .totalPairs = 6},
+                .data5{.a = 4, .l = 2, .k = 4}}}}}},
+        LCOMClassData{
+            .source = TESTS / "cpp-tests/classes/template_classes/multiple_templates.cpp",
+            .dot = DotBehavior::Full,
+            .ClassData{LCOMData{.classes{LCOMData::LCOMClass{
+                .LCOM1 = 3,
+                .LCOM2 = 3,
+                .LCOM3 = 3,
+                .LCOM4 = 3,
+                .LCOM5 = 1,
+                .data1{.sharedPairs = 0, .unsharedPairs = 3, .totalPairs = 3},
+                .data5{.a = 3, .l = 3, .k = 3}}}}}},
+        LCOMClassData{
+            .source = TESTS / "cpp-tests/classes/template_classes/template_template_parameter.cpp",
+            .dot = DotBehavior::Full,
+            .ClassData{LCOMData{.classes{LCOMData::LCOMClass{
+                .LCOM1 = 2,
+                .LCOM2 = 1,
+                .LCOM3 = 2,
+                .LCOM4 = 2,
+                .LCOM5 = (double)3 / (double)4,
+                .data1{.sharedPairs = 1, .unsharedPairs = 2, .totalPairs = 3},
+                .data5{.a = 3, .l = 2, .k = 3}}}}}},
+        LCOMClassData{
+            .source = TESTS / "cpp-tests/classes/template_classes/template_specialization.cpp",
+            .dot = DotBehavior::Full,
+            .ClassData{LCOMData{.classes{
+                LCOMData::LCOMClass{
+                    .LCOM1 = 2,
+                    .LCOM2 = 1,
+                    .LCOM3 = 2,
+                    .LCOM4 = 2,
+                    .LCOM5 = (double)3 / (double)4,
+                    .data1{.sharedPairs = 1, .unsharedPairs = 2, .totalPairs = 3},
+                    .data5{.a = 3, .l = 2, .k = 3}},
+                LCOMData::LCOMClass{
+                    .LCOM1 = 2,
+                    .LCOM2 = 1,
+                    .LCOM3 = 2,
+                    .LCOM4 = 2,
+                    .LCOM5 = (double)3 / (double)4,
+                    .data1{.sharedPairs = 1, .unsharedPairs = 2, .totalPairs = 3},
+                    .data5{.a = 3, .l = 2, .k = 3}}}}}}                           
+    ),
     LCOMClassData::PrintTo);
     

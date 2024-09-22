@@ -13,6 +13,10 @@ template < class XX > class X
         XX methodTwo() {
             return item2;
         }
+
+        XX methodThree() {
+            return item;
+        }
 };
 
 // Template specialization
@@ -20,15 +24,20 @@ template <> class X <int>
 {
     public:
         int item;
+        int item2;
 
-        int methodThree() {
+        int methodOne() {
             return item;
         }
 
-        int methodFour() {
+        int methodFTwo() {
             return item + 1;
+        }
+
+        int methodThree() {
+            return item2;
         }
 };
 
-// Expected LCOM4: 2 for X <XX>, 1 for X <int>
-// Result LCOM4: 2 for X <XX>, 1 for X <int>
+// Expected LCOM4: 2 for X <XX>, 2 for X <int>
+// Result LCOM4: 2 for X <XX>, 2 for X <int>
