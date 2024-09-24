@@ -4,7 +4,7 @@
 
 LCOM Metric Analyzer is a tool that evaluates the quality of object-oriented code by identifying classes that lack cohesion.
 These classes can be broken down into smaller, more manageable units for improved clarity and maintenance.
-Cohesion is measured using the various LCOM (Lack of Cohesion of Methods) metrics, and source code is processed using the ROSE compiler infrastructure.
+Cohesion is measured using the various LCOM (Lack of Cohesion of Methods) metrics, and source code is processed using the [ROSE compiler infrastructure](http://rosecompiler.org/).
 
 ## Example
 
