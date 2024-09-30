@@ -715,11 +715,17 @@ std::vector<SgExpression*> GetRootExp(SgExpression* exp) {
 
   // Traverse down pointer derefs.
   if (SgPointerDerefExp* pde = is<SgPointerDerefExp>(exp)) {
+    LOG(TRACE) << NPrint::p(pde)
+               << " is a SgPointerDerefExp*. Getting what it points to."
+               << std::endl;
     return GetRootExp(pde->get_operand());
   }
 
   // Traverse down array pointer derefs.
   if (SgPntrArrRefExp* pare = is<SgPntrArrRefExp>(exp)) {
+    LOG(TRACE) << NPrint::p(pare)
+               << " is a SgPntrArrRefExp*. Getting what it points to."
+               << std::endl;
     return GetRootExp(pare->get_lhs_operand());
   }
 
@@ -1021,11 +1027,10 @@ class VisitorTraversal : public AstTopDownProcessing<IA<C>> {
     // Check if the attribute exists in the attributeAliasMap
     // If it is found, check for further aliases.
     auto it = IA<C>::attributeAliasMap.find(aDecl.GetId());
-    while (it != IA<C>::attributeAliasMap.end()){
+    if (it != IA<C>::attributeAliasMap.end()){
       LOG(DEBUG) << "Attribute " << aDecl << " is in attributeAliasMap, swapping with "
                  << it->second << std::endl;
       aDecl = it->second;
-      it = IA<C>::attributeAliasMap.find(aDecl.GetId());
     }
 
     // Make sure the associated attribute exists in attributeData.
@@ -1263,6 +1268,32 @@ class VisitorTraversal : public AstTopDownProcessing<IA<C>> {
 
 template <typename C>
 class RenamingTraversal : public AstTopDownProcessing<IA<C>> {
+  // This method searches for the root SgVarRefExp associated with a C++ reference
+  // The logic here is seperated from GetRootExp because we only want to to this
+  // in the renaming traversal to populate the alias map. 
+  static SgExpression* GetRefToVar(SgExpression* exp) {
+    if (!exp) return nullptr;
+
+    if (SgVarRefExp* vre = is<SgVarRefExp>(exp)) {
+      SgInitializedName *var = vre->get_symbol()->get_declaration();
+      // Traverse a chain of references, if neccesary
+      // Ex. int &j = i; int &k = j; int &l = k;
+      if (SageInterface::isReferenceType(var->get_type())) {
+        return GetRefToVar(var->get_initializer());
+      }
+      return vre;
+    }
+    if (SgAssignInitializer* ai = is<SgAssignInitializer>(exp)) {
+      return GetRefToVar(ai->get_operand());
+    }
+    if (SgArrowExp* ae = is<SgArrowExp>(exp)) {
+      return GetRefToVar(ae->get_rhs_operand());
+    }
+
+    // Rely on GetRootExp to handle any additional unwrapping
+    return GetRefToVar(GetRootExp(exp).back());
+  }
+
   static IA<C> HandleSourceFile(SgSourceFile*& id, IA<C>& ia) {
     sourceFile = id->get_sourceFileNameWithPath();
     // Hash the path to anonymize it.
@@ -1372,14 +1403,8 @@ class RenamingTraversal : public AstTopDownProcessing<IA<C>> {
     // If this type is a reference, add the referenced value to the alias map.
     if (SageInterface::isReferenceType(initId->get_type())) {
       LOG(TRACE) << "Found reference type " << NPrint::p(initId) << std::endl;
-      SgVarRefExp* refToVar = nullptr;
-
-      if (SgAssignInitializer *ini = is<SgAssignInitializer>(initId->get_initializer())) {
-        if (SgArrowExp* arrow = is<SgArrowExp>(ini->get_operand())) {
-          refToVar = is<SgVarRefExp>(arrow->get_rhs_operand());
-          LOG(TRACE) << "Found reference to variable " << NPrint::p(refToVar) << std::endl;
-        }
-      }
+      
+      SgVarRefExp* refToVar = is<SgVarRefExp>(GetRefToVar(initId->get_initializer()));
 
       if (!refToVar) {
         LOG(DEBUG) << "Could not find reference to variable for " << NPrint::p(initId) << std::endl;
@@ -1387,7 +1412,7 @@ class RenamingTraversal : public AstTopDownProcessing<IA<C>> {
       }
 
       // Convert the expression to a proper AType.
-      AType a = AType(GetRootExp(refToVar));
+      AType a = AType(std::vector<SgExpression*>{refToVar});
 
       // If the attribute is not in attributeData, we need to add it
       // TODO: This code is copied from above. Refactor.

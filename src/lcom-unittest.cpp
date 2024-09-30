@@ -982,7 +982,40 @@ INSTANTIATE_TEST_SUITE_P(
                     .LCOM4 = 2,
                     .LCOM5 = (double)3 / (double)4,
                     .data1{.sharedPairs = 1, .unsharedPairs = 2, .totalPairs = 3},
-                    .data5{.a = 3, .l = 2, .k = 3}}}}}}                           
+                    .data5{.a = 3, .l = 2, .k = 3}}}}}},
+        LCOMClassData{
+            .source = TESTS / "cpp-tests/aliases/ArrayAlias.cpp",
+            .dot = DotBehavior::Full,
+            .ClassData{LCOMData{.classes{LCOMData::LCOMClass{
+                .LCOM1 = 4,
+                .LCOM2 = 0,
+                .LCOM3 = 2,
+                .LCOM4 = 2,
+                .LCOM5 = (double)5 / (double)8,
+                .data1{.sharedPairs = 6, .unsharedPairs = 4, .totalPairs = 10},
+                .data5{.a = 5, .l = 2, .k = 5}}}}}},
+        LCOMClassData{
+            .source = TESTS / "cpp-tests/aliases/VariableAlias.cpp",
+            .dot = DotBehavior::Full,
+            .ClassData{LCOMData{.classes{LCOMData::LCOMClass{
+                .LCOM1 = 3,
+                .LCOM2 = 0,
+                .LCOM3 = 2,
+                .LCOM4 = 2,
+                .LCOM5 = (double)2 / (double)3,
+                .data1{.sharedPairs = 3, .unsharedPairs = 3, .totalPairs = 6},
+                .data5{.a = 4, .l = 2, .k = 4}}}}}},
+        LCOMClassData{
+            .source = TESTS / "cpp-tests/aliases/VariableAlias2.cpp",
+            .dot = DotBehavior::Full,
+            .ClassData{LCOMData{.classes{LCOMData::LCOMClass{
+                .LCOM1 = 2,
+                .LCOM2 = 1,
+                .LCOM3 = 2,
+                .LCOM4 = 2,
+                .LCOM5 = (double)3 / (double)4,
+                .data1{.sharedPairs = 1, .unsharedPairs = 2, .totalPairs = 3},
+                .data5{.a = 3, .l = 2, .k = 3}}}}}}
     ),
     LCOMClassData::PrintTo);
     
