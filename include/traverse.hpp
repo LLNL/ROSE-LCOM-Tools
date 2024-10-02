@@ -1099,6 +1099,35 @@ class VisitorTraversal : public AstTopDownProcessing<IA<C>> {
     return IA<C>(ia);
   }
 
+  static IA<C> HandleSgMemberFunctionRefExp(SgMemberFunctionRefExp* id, IA<C> ia) {
+    // Get the root expression. This resolves renamings, fields, and pointers.
+    std::vector<SgExpression*> root = GetRootExp(id);
+    SgMemberFunctionRefExp* baseRootExp = is<SgMemberFunctionRefExp>(GetBaseRootExp(root));
+
+    Class<C>* cPtr = GetOwningClass<C>(baseRootExp);
+    if (!cPtr) return IA<C>(ia);
+    Class<C>& owningClass = *cPtr;
+
+    Method<C>* mPtr = GetOwningMethod<C>(baseRootExp);
+    if (!mPtr) return IA<C>(ia);
+    Method<C>& owningMethod = *mPtr;
+
+    MType decl = is<MType>(baseRootExp->get_symbol()->get_declaration());
+    if (!decl)
+      LOG(FATAL) << "Declaration of " << NPrint::p(baseRootExp) << " is null."
+                 << std::endl;
+
+    bool success = owningMethod.calledMethods
+                       .emplace(decl, std::move(CalledMethod<C>(
+                                          decl, owningClass, owningMethod)))
+                       .second;
+    if (!success)
+      LOG(DEBUG) << NPrint::p(decl) << " already in owningMethod.calledMethods."
+                 << std::endl;
+
+    return IA<C>(ia);
+  }
+
   // This function is mostly superfluous.
   // It will log unexpected expression types, but most of these are meant to be
   // ignored by the analysis anyway.
@@ -1255,6 +1284,9 @@ class VisitorTraversal : public AstTopDownProcessing<IA<C>> {
     } else if (SgFunctionRefExp* fre = is<SgFunctionRefExp>(n)) {
       LOG(INFO) << "Handling SgFunctionRefExp " << NPrint::p(vre) << std::endl;
       return HandleSgFunctionRefExp(fre, ia);
+    } else if (SgMemberFunctionRefExp *mfre = is<SgMemberFunctionRefExp>(n)) {
+      LOG(INFO) << "Handling SgMemberFunctionRefExp " << NPrint::p(mfre) << std::endl;
+      return HandleSgMemberFunctionRefExp(mfre, ia);
     } else if (SgExpression* e = is<SgExpression>(n)) {
       LOG(INFO) << "Handling SgExpression " << NPrint::p(e) << std::endl;
       return HandleExpression(e, ia);
