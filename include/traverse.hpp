@@ -598,6 +598,7 @@ class IA {
   // Stores a mapping between renamings and their renamed attributes/methods.
   static std::map<SgNode*, AType> attributeAliasMap;
   static std::map<MType, MType> methodAliasMap;
+  static std::map<SgNode*, MType> cStyleMethodAliasMap;
 
   // Specific constructors are required to create a valid inherited attribute.
   IA(){};
@@ -668,6 +669,8 @@ template <typename C>
 std::map<SgNode*, AType> IA<C>::attributeAliasMap;
 template <typename C>
 std::map<MType, MType> IA<C>::methodAliasMap;
+template <typename C>
+std::map<SgNode*, MType> IA<C>::cStyleMethodAliasMap;
 
 // It is possible to need to go multiple layers down, alternating between
 // renames, dots, pointer derefs, etc.
@@ -1033,6 +1036,20 @@ class VisitorTraversal : public AstTopDownProcessing<IA<C>> {
       aDecl = it->second;
     }
 
+    // Check if this attribute is actually an aliased method.
+    auto methodIt = IA<C>::cStyleMethodAliasMap.find(aDecl.GetId());
+    if (methodIt != IA<C>::cStyleMethodAliasMap.end()){
+      LOG(DEBUG) << "Attribute " << aDecl << " is in cStyleMethodAliasMap, inserting called method "
+                 << methodIt->second << std::endl;
+      MType mDecl = methodIt->second;
+
+      owningMethod.calledMethods
+                          .emplace(mDecl, std::move(CalledMethod<C>(
+                                            mDecl, owningClass, owningMethod)))
+                          .second;
+      return IA<C>(ia);
+    }
+
     // Make sure the associated attribute exists in attributeData.
     bool success =
         IA<C>::attributeData
@@ -1315,6 +1332,11 @@ class RenamingTraversal : public AstTopDownProcessing<IA<C>> {
       }
       return vre;
     }
+    if (SgMemberFunctionRefExp* mf = is<SgMemberFunctionRefExp>(exp)) {
+      return mf;
+    }
+
+    // TODO: Is it safe to move these two up to GetRootExp()? 
     if (SgAssignInitializer* ai = is<SgAssignInitializer>(exp)) {
       return GetRefToVar(ai->get_operand());
     }
@@ -1322,8 +1344,68 @@ class RenamingTraversal : public AstTopDownProcessing<IA<C>> {
       return GetRefToVar(ae->get_rhs_operand());
     }
 
-    // Rely on GetRootExp to handle any additional unwrapping
-    return GetRefToVar(GetRootExp(exp).back());
+    // Attempt to rely on GetRootExp to handle the rest of the unwrapping.
+    if (exp != GetRootExp(exp).back()) {
+      return GetRefToVar(GetRootExp(exp).back());
+    }
+
+    // No reference could be found
+    return nullptr;
+  }
+
+  static IA<C> HandleVariableReference(SgInitializedName*& initId, SgVarRefExp *refToVar, IA<C>& ia) {
+    // Convert the expression to a proper AType.
+    AType a = AType(std::vector<SgExpression*>{refToVar});
+
+    // If the attribute is not in attributeData, we need to add it
+    // TODO: This code is copied from above. Refactor.
+    if (IA<C>::attributeData.count(a) == 0) {
+      // Get the owning class for varId.
+      const C owningClassId = GetScope<C>(refToVar);
+      if (owningClassId == nullptr) {
+        LOG(DEBUG) << NPrint::p(refToVar)
+                  << " has no owning class, so its reference by "
+                  << NPrint::p(initId) << " is ignored" << std::endl;
+        return IA<C>(ia);
+      }
+      // The class should already be in the map. If not, add it.
+      if (!IA<C>::classData.count(owningClassId)) {
+        LOG(TRACE) << "Class " << NPrint::p(owningClassId)
+                  << " missing from classData map. " << IA<C>::printClassData()
+                  << ". Inserting..." << std::endl;
+        IA<C>::classData.emplace(
+            owningClassId, std::move(Class<C>(owningClassId, sourceFile)));
+        LOG(TRACE) << IA<C>::printClassData() << std::endl;
+      }
+      Class<C>& owningClass = IA<C>::classData.at(owningClassId);
+
+      // Emplace the attribute.
+      bool success = IA<C>::attributeData
+                        .emplace(a, std::move(Attribute<C>(a, owningClass)))
+                        .second;
+      if (!success) {
+        LOG(FATAL) << "Failed to emplace attribute " << a
+                  << " into attributeData " << IA<C>::printAttributeData()
+                  << std::endl;
+      }
+    }
+
+    // Store the relationship in the alias map for later use.
+    IA<C>::attributeAliasMap.emplace(initId, a);
+    LOG(INFO) << "Added alias pair <" << NPrint::p(initId) << "," << a << ">" << std::endl;
+    return IA<C>(ia);
+  }
+
+  static IA<C> HandleMethodReference(SgInitializedName*& initId, SgMemberFunctionRefExp *refToMethod, IA<C>& ia) {
+    // Get the declaration associated with the root expression.
+    MType decl = is<MType>(refToMethod->get_symbol()->get_declaration());
+
+    // Store the relationship in the alias map using the SgInitializedName as the key.
+    // This is because c-style method references are an SgVariableDeclaration, not an SgFunctionDeclaration.
+    IA<C>::cStyleMethodAliasMap.emplace(initId, decl).second;
+    LOG(INFO) << "Added alias pair <" << NPrint::p(initId) << "," << NPrint::p(decl) << ">" << std::endl;
+
+    return IA<C>(ia);
   }
 
   static IA<C> HandleSourceFile(SgSourceFile*& id, IA<C>& ia) {
@@ -1430,59 +1512,25 @@ class RenamingTraversal : public AstTopDownProcessing<IA<C>> {
     return IA<C>(ia);
   }
 
-  // Check if the SgInitializedName is a reference, and if so, add it to the attributeAliasMap.
+  // Check if the SgInitializedName is a reference, and if so, add it to the proper alias map.
   static IA<C> HandleSgInitializedName(SgInitializedName*& initId, IA<C>& ia) {
     // If this type is a reference, add the referenced value to the alias map.
     if (SageInterface::isReferenceType(initId->get_type())) {
       LOG(TRACE) << "Found reference type " << NPrint::p(initId) << std::endl;
       
-      SgVarRefExp* refToVar = is<SgVarRefExp>(GetRefToVar(initId->get_initializer()));
+      SgExpression* refToVar = GetRefToVar(initId->get_initializer());
 
-      if (!refToVar) {
+      if (SgVarRefExp *vre = is<SgVarRefExp>(refToVar)) {
+        LOG(DEBUG) << "Found reference to variable " << NPrint::p(vre) << std::endl;
+        return HandleVariableReference(initId, vre, ia);
+      } else if (SgMemberFunctionRefExp *mfre = is<SgMemberFunctionRefExp>(refToVar)) {
+        LOG(DEBUG) << "Found reference to member function " << NPrint::p(mfre) << std::endl;
+        return HandleMethodReference(initId, mfre, ia);
+      } else {
         LOG(DEBUG) << "Could not find reference to variable for " << NPrint::p(initId) << std::endl;
         return IA<C>(ia);
       }
-
-      // Convert the expression to a proper AType.
-      AType a = AType(std::vector<SgExpression*>{refToVar});
-
-      // If the attribute is not in attributeData, we need to add it
-      // TODO: This code is copied from above. Refactor.
-      if (IA<C>::attributeData.count(a) == 0) {
-        // Get the owning class for varId.
-        const C owningClassId = GetScope<C>(refToVar);
-        if (owningClassId == nullptr) {
-          LOG(DEBUG) << NPrint::p(refToVar)
-                    << " has no owning class, so its reference by "
-                    << NPrint::p(initId) << " is ignored" << std::endl;
-          return IA<C>(ia);
-        }
-        // The class should already be in the map. If not, add it.
-        if (!IA<C>::classData.count(owningClassId)) {
-          LOG(TRACE) << "Class " << NPrint::p(owningClassId)
-                    << " missing from classData map. " << IA<C>::printClassData()
-                    << ". Inserting..." << std::endl;
-          IA<C>::classData.emplace(
-              owningClassId, std::move(Class<C>(owningClassId, sourceFile)));
-          LOG(TRACE) << IA<C>::printClassData() << std::endl;
-        }
-        Class<C>& owningClass = IA<C>::classData.at(owningClassId);
-
-        // Emplace the attribute.
-        bool success = IA<C>::attributeData
-                          .emplace(a, std::move(Attribute<C>(a, owningClass)))
-                          .second;
-        if (!success) {
-          LOG(FATAL) << "Failed to emplace attribute " << a
-                    << " into attributeData " << IA<C>::printAttributeData()
-                    << std::endl;
-        }
-      }
-
-      // Store the relationship in the alias map for later use.
-      IA<C>::attributeAliasMap.emplace(initId, a);
-      LOG(DEBUG) << "Added alias pair <" << NPrint::p(initId) << "," << a << ">" << std::endl;
-        }
+    }
     return IA<C>(ia);
   }
               

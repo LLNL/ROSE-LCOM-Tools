@@ -1,15 +1,13 @@
 class Function {
-    int i, j;
+    static int i, j;
 
     static int method() {
-        return i;
+        return Function::i;
     }
 
-    static int (*aliasMethod)() = &Function::method;
+    int (& aliasMethod)() = method;
 
     int method2() {
-        j = 2;
-        auto& aliasMethod = method;
         return aliasMethod();
     }
 };
