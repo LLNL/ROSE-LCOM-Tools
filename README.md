@@ -453,7 +453,7 @@ $(go env GOPATH)/bin/lcom4
 ```
 
 
-## [PyLCOM](https://github.com/tushartushar/LCOM)
+## [PyLCOM](https://github.com/potfur/lcom)
 
 Installing:
 ```bash
