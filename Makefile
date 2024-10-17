@@ -1,3 +1,5 @@
+-include env.mk
+
 # Note: This Makefile is no longer maintained. Please use the cmake build system to build this tool instead. This Makefile is kept here for reference.
 
 # Makefile for LCOM metrics tool using the ROSE compiler framework.

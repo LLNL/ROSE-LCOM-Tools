@@ -38,6 +38,31 @@ class Attribute;
 template <typename C>
 class CalledMethod;
 
+namespace sagehelper
+{
+  // replace with SageInterface::Ada::declOf
+  //   when available
+  inline
+  SgInitializedName& declOf(const SgEnumVal& n)
+  {
+    SgEnumDeclaration&        dcl = SG_DEREF(n.get_declaration());
+    SgInitializedNamePtrList& lst = dcl.get_enumerators();
+
+    const auto lim = lst.end();
+    const auto pos = std::find_if( lst.begin(), lim,
+                                   [&n](sg::NotNull<SgInitializedName> nm)->bool
+                                   {
+                                     return boost::iequals( nm->get_name().getString(),
+                                                            n.get_name().getString()
+                                                          );
+                                   }
+                                 );
+
+    ASSERT_require(pos != lim);
+    return SG_DEREF(*pos);
+  }
+}
+
 // Attribute type.
 class AType {
  public:
@@ -53,13 +78,33 @@ class AType {
     std::vector<T> attrs(exps.size());
     std::transform(exps.cbegin(), exps.cend(), attrs.begin(),
                    [](SgExpression* exp) {
-                     SgVarRefExp* vre = is<SgVarRefExp*>(exp);
-                     if (!vre)
+                     T d = nullptr;
+
+                     if (SgVarRefExp* vre = is<SgVarRefExp*>(exp))
+                     {
+                       d = is<T>(vre->get_symbol()->get_declaration());
+                     }
+                     else if (SgEnumVal* enm = is<SgEnumVal*>(exp))
+                     {
+                       d = &sagehelper::declOf(*enm);
+                     }
+                     else
+                     {
+                       if (false)
+                       {
+                         ASSERT_require(exp);
+                         std::cerr << exp->get_parent()->unparseToString()
+                                   << " -> " << exp->unparseToString()
+                                   << " : " << typeid(*exp).name()
+                                   << std::endl;
+                       }
+
                        LOG(FATAL) << "Conversion of " << NPrint::p(exp)
                                   << " to SgVarRefExp* failed" << std::endl;
-                     T d = is<T>(vre->get_symbol()->get_declaration());
+                     }
+
                      if (!d)
-                       LOG(FATAL) << "Declaration of " << NPrint::p(vre)
+                       LOG(FATAL) << "Declaration of " << exp->unparseToString()
                                   << " is null." << std::endl;
                      return d;
                    });
@@ -245,27 +290,51 @@ static T GetScope(AType n) {
 
 template <typename C>
 std::vector<C> GetRecords(SgNode* n) {
+  namespace siada = SageInterface::Ada;
+
   LOG(DEBUG) << "Finding additional records for " << NPrint::p(n) << std::endl;
+
   std::vector<C> owningClassIds;
+
+  // functor to store all type declarations associated with some function
+  auto storeRecordAssociation =
+       [&owningClassIds,n]
+       (const SgDeclarationStatement* tydcl) -> void
+       {
+         ASSERT_require(tydcl);
+
+         SgDeclarationStatement* typeDeclaration = tydcl->get_firstNondefiningDeclaration();
+
+         if (C classId = is<C>(typeDeclaration)) {
+            LOG(DEBUG) << NPrint::p(n) << " is a method within the class, "
+                       << NPrint::p(classId) << std::endl;
+            owningClassIds.push_back(classId);
+         }
+       };
+
   // Tagged records approach.
   // Functions/procedures that are tied to a tagged record will list the tagged
   // record as a parameter. This code will find the classes associated with
   // those parameters.
   if (SgFunctionDeclaration* fd = is<SgFunctionDeclaration>(n)) {
-    std::vector<SageInterface::Ada::PrimitiveParameterDesc> records;
-    records = SageInterface::Ada::primitiveParameterPositions(fd);
-    for (auto& record : records) {
+#if NEW_SIGNATURE_PROCESSING
+    siada::PrimitiveSignatureElementsDesc elements = siada::primitiveSignatureElements(fd);
+
+    if (elements.result())
+      storeRecordAssociation(elements.result());
+
+    for (auto& record : elements.parameters()) {
       // Get the type declaration of this record.
       // TODO: There seem to be some dupes. Ask Peter about it.
-      SgDeclarationStatement* typeDeclaration =
-          record.typeDeclaration()->get_firstNondefiningDeclaration();
-      // If it is a class, add it to the list.
-      if (C classId = is<C>(typeDeclaration)) {
-        LOG(DEBUG) << NPrint::p(n) << " is a method within the class, "
-                   << NPrint::p(classId) << std::endl;
-        owningClassIds.push_back(classId);
-      }
+      storeRecordAssociation(record.typeDeclaration());
     }
+#else /* NEW_SIGNATURE_PROCESSING */
+    for (auto& record : siada::primitiveParameterPositions(fd)) {
+      // Get the type declaration of this record.
+      // TODO: There seem to be some dupes. Ask Peter about it.
+      storeRecordAssociation(record.typeDeclaration());
+    }
+#endif /* NEW_SIGNATURE_PROCESSING */
   }
   LOG(DEBUG) << "Found " << owningClassIds.size() << " additional records for "
              << NPrint::p(n) << std::endl;
@@ -320,10 +389,20 @@ std::vector<C> GetClassIds(SgNode* n) {
 bool IsClassOwner(SgExpression* id, const MType& mId) {
   const std::vector<SgClassDeclaration*> owningClassIds =
       GetRecords<SgClassDeclaration*>(mId);
+  // Peter: use sageinterface ada type of expression instead of get_type
+  // Peter: Could cast type to a SgClassType or SgNamedType, which will have a
+  // good get_declaration method.
+  SgDeclarationStatement* declPeter =
+      is<SgClassType>(SageInterface::Ada::typeOfExpr(id).typerep())
+          ->get_declaration();
   SgDeclarationStatement* decl = id->get_type()->getAssociatedDeclaration();
+  LOG(TRACE) << "declPeter=" << declPeter << "\tdecl=" << decl << "\t"
+             << (decl == declPeter) << std::endl;
 
   if (SgClassDeclaration* classRefId = is<SgClassDeclaration>(decl)) {
     for (const auto& classId : owningClassIds) {
+      // Peter: Try pointer for first nondefining declaration instead of
+      // getname.
       if (classId->get_firstNondefiningDeclaration() ==
           classRefId->get_firstNondefiningDeclaration()) {
         LOG(TRACE) << "Match found for " << NPrint::p(classRefId) << std::endl;
@@ -697,12 +776,39 @@ std::vector<SgExpression*> GetRootExp(SgExpression* exp) {
     return GetRootExp(pare->get_lhs_operand());
   }
 
+  if (SgAdaAttributeExp* attr = is<SgAdaAttributeExp>(exp)) {
+    return GetRootExp(attr->get_object());
+  }
+
+  //
+  if (SgCastExp* castexp = is<SgCastExp>(exp)) {
+    return GetRootExp(castexp->get_operand());
+  }
+
+  if (/*SgTypeExpression* typeex =*/ is<SgTypeExpression>(exp)) {
+    return {};
+  }
+
+  // PP: 05/13/24 not sure how to handle function calls..
+  //              ignore them for now?
+  //     case:
+  //            x : Integer renames Identity(1); -- x renames result of function call
+  //                                             -- similar to variable
+  if (/*SgFunctionCallExp* callexp =*/ is<SgFunctionCallExp>(exp)) {
+    return {};
+  }
+
   // No further unwrapping match found.
-  std::vector<SgExpression*> ret{exp};
-  return ret;
+  return { exp };
 }
 SgExpression* GetBaseRootExp(std::vector<SgExpression*> rootExp) {
-  if (!rootExp.size()) LOG(FATAL) << "Empty root list found." << std::endl;
+  if (!rootExp.size())
+  {
+     // PP 05/13/24 return nullptr instead of failing..
+     LOG(WARNING) << "Empty root list found." << std::endl;
+     return nullptr;
+  }
+
   return rootExp[0];
 }
 template <typename T>
@@ -933,6 +1039,9 @@ class VisitorTraversal : public AstTopDownProcessing<IA<C>> {
     std::vector<SgExpression*> root = GetRootExp(id);
     SgVarRefExp* baseRootExp = is<SgVarRefExp>(GetBaseRootExp(root));
 
+    // PP 05/13/24 added null test
+    if (baseRootExp == nullptr) return IA<C>(ia);
+
     Method<C>* mPtr = GetOwningMethod<C>(baseRootExp);
     if (!mPtr) return IA<C>(ia);
     Method<C>& owningMethod = *mPtr;
@@ -1023,6 +1132,9 @@ class VisitorTraversal : public AstTopDownProcessing<IA<C>> {
     // Get the root expression. This resolves renamings, fields, and pointers.
     std::vector<SgExpression*> root = GetRootExp(id);
     SgFunctionRefExp* baseRootExp = is<SgFunctionRefExp>(GetBaseRootExp(root));
+
+    // PP 05/13/24 added null test
+    if (baseRootExp == nullptr) return IA<C>(ia);
 
     Class<C>* cPtr = GetOwningClass<C>(baseRootExp);
     if (!cPtr) return IA<C>(ia);
@@ -1201,7 +1313,8 @@ class RenamingTraversal : public AstTopDownProcessing<IA<C>> {
     // If the root expression is an SgVoidVal or SgNullExpression, then it
     // must be part of a generic function declaration, which can be safely
     // ignored.
-    if (is<SgVoidVal>(baseRootExp) || is<SgNullExpression>(baseRootExp)) {
+    // PP: 05/13/24 - added null test
+    if ((baseRootExp == nullptr) || is<SgVoidVal>(baseRootExp) || is<SgNullExpression>(baseRootExp)) {
       LOG(DEBUG) << NPrint::p(baseRootExp)
                  << " is part of a generic function declaration. Ignoring"
                  << std::endl;
