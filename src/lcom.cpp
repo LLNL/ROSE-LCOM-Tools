@@ -76,18 +76,27 @@ std::tuple<std::vector<std::string>, Settings> parseArgs(
                "any right parts contained within.\n"));
   lcomArgs.insert(
       scl::Switch("class-type")
-          .argument("[Default|Package|Function|Class|ProtectedObject|All]",
+          .argument("[Default|Package|Function|Class|ProtectedObject|Namespace|All]",
                     scl::enumParser<ClassType>(settings.classType)
                         ->with("Package", ClassType::Package)
                         ->with("Function", ClassType::Function)
                         ->with("Class", ClassType::Class)
                         ->with("ProtectedObject", ClassType::ProtectedObject)
+                        ->with("Namespace", ClassType::Namespace)
                         ->with("Default", ClassType::Default)
                         ->with("All", ClassType::All))
           .doc(std::string(
                    "The program unit to use as the LCOM class. \"All\" will "
                    "run analysis on all predefined class types. Defaults to ") +
                typeid(Class).name() + "."));
+  lcomArgs.insert(
+      scl::Switch("filter-undefined-methods")
+          .intrinsicValue("true", scl::booleanParser(filterUndefinedMethods))
+          .doc("Filter out methods that are not defined."));
+  lcomArgs.insert(
+      scl::Switch("filter-ctors-dtors")
+          .intrinsicValue("true", scl::booleanParser(filterCtorsDtors))
+          .doc("Filter out constructors and destructors."));
   scl::ParserResult cmdline = p.with(lcomArgs).parse(args).apply();
 
   // Initialize the logger here.
@@ -134,6 +143,7 @@ std::string ProcessLCOM(SgProject* project) {
   std::stringstream ss;
   const std::vector<LCOM::Class<C, Method, Attribute>> LCOMInput =
       Traverse::GetClassData<C>(project);
+      
   // Compute LCOM metrics for each class.
   for (const auto& LCOMClass : LCOMInput) {
     std::string className = "null";
@@ -236,6 +246,9 @@ int main(int argc, char* argv[]) {
     case ClassType::ProtectedObject:
       ss << ProcessLCOM<SgAdaProtectedSpec*>(project);
       break;
+    case ClassType::Namespace:
+      ss << ProcessLCOM<SgNamespaceDeclarationStatement*>(project);
+      break;
     case ClassType::Default:
       LOG(INFO) << "No/invalid class type specified. Running analysis on "
                    "default type, "
@@ -247,6 +260,7 @@ int main(int argc, char* argv[]) {
       ss << ProcessLCOM<SgFunctionDeclaration*>(project);
       ss << ProcessLCOM<SgClassDeclaration*>(project);
       ss << ProcessLCOM<SgAdaProtectedSpec*>(project);
+      ss << ProcessLCOM<SgNamespaceDeclarationStatement*>(project);
   }
 
   // Output the string to file.

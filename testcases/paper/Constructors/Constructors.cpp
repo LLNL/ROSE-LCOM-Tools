@@ -5,6 +5,10 @@ class Constructors {
         i = 1;
     }
 
+    Constructors(int _i) : i(_i) {}
+
+    Constructors(double _j) : j(_j) {}
+
     void method() {
         j = 2;
     }

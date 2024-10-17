@@ -45,7 +45,7 @@ class Config:
     DIR = os.path.join(TEST_DIR, "simple-cases")
     # [trace|debug|info|notice|warning|error|fatal]
     LOG_LEVEL = "trace"
-    # [Default|Package|Function|Class|ProtectedObject|All]
+    # [Default|Package|Function|Class|ProtectedObject|Namespace|All]
     CLASS_TYPE = "All"
     # [LeftOnly|Full]
     DOT_BEHAVIOR = "Full"
@@ -442,7 +442,7 @@ def main():
         "--class_type",
         type=str,
         help=f'The local program unit to evaluate LCOM on (e.g., class, function, etc.) (default: "{Config.CLASS_TYPE}").',
-        choices=["Default", "Package", "Function", "Class", "ProtectedObject", "All"],
+        choices=["Default", "Package", "Function", "Class", "ProtectedObject", "Namespace", "All"],
     )
     parser.add_argument(
         "--dot_mode",

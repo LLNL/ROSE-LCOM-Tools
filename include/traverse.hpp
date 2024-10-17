@@ -244,6 +244,11 @@ static SgNode* GetScopeRecurse(SgNode* n, SgNode* orig) {
                << NPrint::p(fd->get_declaration()) << std::endl;
     return GetScopeRecurse<T>(fd->get_declaration(), orig);
   }
+  if (SgNamespaceDefinitionStatement* nd = is<SgNamespaceDefinitionStatement>(n)) {
+    LOG(TRACE) << "n was an SgNamespaceDefinitionStatement. Traversing up to "
+               << NPrint::p(nd->get_namespaceDeclaration()->get_firstNondefiningDeclaration()) << std::endl;
+    return GetScopeRecurse<T>(nd->get_namespaceDeclaration()->get_firstNondefiningDeclaration(), orig);
+  }
   if (SgAdaUnitRefExp* aure = is<SgAdaUnitRefExp>(n)) {
     LOG(TRACE) << "n was an SgAdaUnitRefExp. Traversing up to "
                << NPrint::p(aure->get_decl()) << std::endl;
@@ -520,6 +525,27 @@ class Class : public Component<C> {
     for (auto i = methods.begin(); i != methods.end();) {
       const auto& method = std::get<1>(*i);
 
+      // Remove undefined methods
+      if (filterUndefinedMethods) {
+        if (method->GetId()->get_definingDeclaration() == nullptr) {
+          LOG(DEBUG) << "Removing " << NPrint::p(method->GetId()) << " from " << *this
+                    << " because it is undefined." << std::endl;
+          i = methods.erase(i);
+          continue;
+        }
+      }
+
+      // Remove constructors and destructors.
+      if (filterCtorsDtors) {
+        if (method->GetId()->get_specialFunctionModifier().isConstructor()
+        ||  method->GetId()->get_specialFunctionModifier().isDestructor()) {
+          LOG(DEBUG) << "Removing " << NPrint::p(method->GetId()) << " from " << *this
+                    << " because it is a constructor/destructor." << std::endl;
+          i = methods.erase(i);
+          continue;
+        }
+      }
+
       // Remove foreign methods.
       if (method->owningClass.GetId() != this->GetId()) {
         LOG(DEBUG) << "Removing " << method << " from " << *this << " because "
@@ -649,8 +675,9 @@ class IA {
   static std::map<AType, Attribute<C>> attributeData;
 
   // Stores a mapping between renamings and their renamed attributes/methods.
-  static std::map<SgAdaRenamingDecl*, AType> attributeAliasMap;
+  static std::map<SgNode*, AType> attributeAliasMap;
   static std::map<MType, MType> methodAliasMap;
+  static std::map<SgNode*, MType> cStyleMethodAliasMap;
 
   // Specific constructors are required to create a valid inherited attribute.
   IA(){};
@@ -718,9 +745,11 @@ template <typename C>
 std::map<AType, Attribute<C>> IA<C>::attributeData =
     std::map<AType, Attribute<C>>();
 template <typename C>
-std::map<SgAdaRenamingDecl*, AType> IA<C>::attributeAliasMap;
+std::map<SgNode*, AType> IA<C>::attributeAliasMap;
 template <typename C>
 std::map<MType, MType> IA<C>::methodAliasMap;
+template <typename C>
+std::map<SgNode*, MType> IA<C>::cStyleMethodAliasMap;
 
 // It is possible to need to go multiple layers down, alternating between
 // renames, dots, pointer derefs, etc.
@@ -768,11 +797,17 @@ std::vector<SgExpression*> GetRootExp(SgExpression* exp) {
 
   // Traverse down pointer derefs.
   if (SgPointerDerefExp* pde = is<SgPointerDerefExp>(exp)) {
+    LOG(TRACE) << NPrint::p(pde)
+               << " is a SgPointerDerefExp*. Getting what it points to."
+               << std::endl;
     return GetRootExp(pde->get_operand());
   }
 
   // Traverse down array pointer derefs.
   if (SgPntrArrRefExp* pare = is<SgPntrArrRefExp>(exp)) {
+    LOG(TRACE) << NPrint::p(pare)
+               << " is a SgPntrArrRefExp*. Getting what it points to."
+               << std::endl;
     return GetRootExp(pare->get_lhs_operand());
   }
 
@@ -1101,6 +1136,29 @@ class VisitorTraversal : public AstTopDownProcessing<IA<C>> {
     // Convert the decl to a proper AType.
     AType aDecl(decl);
 
+    // Check if the attribute exists in the attributeAliasMap
+    // If it is found, check for further aliases.
+    auto it = IA<C>::attributeAliasMap.find(aDecl.GetId());
+    if (it != IA<C>::attributeAliasMap.end()){
+      LOG(DEBUG) << "Attribute " << aDecl << " is in attributeAliasMap, swapping with "
+                 << it->second << std::endl;
+      aDecl = it->second;
+    }
+
+    // Check if this attribute is actually an aliased method.
+    auto methodIt = IA<C>::cStyleMethodAliasMap.find(aDecl.GetId());
+    if (methodIt != IA<C>::cStyleMethodAliasMap.end()){
+      LOG(DEBUG) << "Attribute " << aDecl << " is in cStyleMethodAliasMap, inserting called method "
+                 << methodIt->second << std::endl;
+      MType mDecl = methodIt->second;
+
+      owningMethod.calledMethods
+                          .emplace(mDecl, std::move(CalledMethod<C>(
+                                            mDecl, owningClass, owningMethod)))
+                          .second;
+      return IA<C>(ia);
+    }
+
     // Make sure the associated attribute exists in attributeData.
     bool success =
         IA<C>::attributeData
@@ -1158,6 +1216,35 @@ class VisitorTraversal : public AstTopDownProcessing<IA<C>> {
                      << NPrint::p(decl) << std::endl;
       }
     }
+
+    bool success = owningMethod.calledMethods
+                       .emplace(decl, std::move(CalledMethod<C>(
+                                          decl, owningClass, owningMethod)))
+                       .second;
+    if (!success)
+      LOG(DEBUG) << NPrint::p(decl) << " already in owningMethod.calledMethods."
+                 << std::endl;
+
+    return IA<C>(ia);
+  }
+
+  static IA<C> HandleSgMemberFunctionRefExp(SgMemberFunctionRefExp* id, IA<C> ia) {
+    // Get the root expression. This resolves renamings, fields, and pointers.
+    std::vector<SgExpression*> root = GetRootExp(id);
+    SgMemberFunctionRefExp* baseRootExp = is<SgMemberFunctionRefExp>(GetBaseRootExp(root));
+
+    Class<C>* cPtr = GetOwningClass<C>(baseRootExp);
+    if (!cPtr) return IA<C>(ia);
+    Class<C>& owningClass = *cPtr;
+
+    Method<C>* mPtr = GetOwningMethod<C>(baseRootExp);
+    if (!mPtr) return IA<C>(ia);
+    Method<C>& owningMethod = *mPtr;
+
+    MType decl = is<MType>(baseRootExp->get_symbol()->get_declaration());
+    if (!decl)
+      LOG(FATAL) << "Declaration of " << NPrint::p(baseRootExp) << " is null."
+                 << std::endl;
 
     bool success = owningMethod.calledMethods
                        .emplace(decl, std::move(CalledMethod<C>(
@@ -1237,6 +1324,80 @@ class VisitorTraversal : public AstTopDownProcessing<IA<C>> {
     return IA<C>(ia);
   }
 
+  // Handles a C++ member initializer list. The initialized variables must be associated back to
+  // the owning method, which in this case is a constructor. Member initializers access attributes
+  // without creating an SgVarRefExp node. In order to associate the initialized variables with the
+  // owning method, we must traverse the children of the SgCtorInitializerList node.
+  static IA<C> HandleSgCtorInitializerList(SgCtorInitializerList* cil, IA<C> ia) {
+    Class<C>* cPtr = GetOwningClass<C>(cil);
+    if (!cPtr) return IA<C>(ia);
+    Class<C>& owningClass = *cPtr;
+
+    Method<C>* mPtr = GetOwningMethod<C>(cil);
+    if (!mPtr) return IA<C>(ia);
+    Method<C>& owningMethod = *mPtr;
+
+    SgClassDeclaration* classDecl = is<SgClassDeclaration>(owningClass.GetId());
+    if (!classDecl) {
+      LOG(DEBUG) << "Ignoring SgCtorInitializerList* " << NPrint::p(cil)
+                 << " because it is not associated with a class declaration";
+      return IA<C>(ia);
+    }
+    SgClassDefinition* classDef = classDecl->get_definition();
+    SgInitializedName* decl = nullptr;
+    for (SgInitializedName* child : cil->get_ctors())
+    {
+      LOG(INFO) << "Handling SgInitializedName " << NPrint::p(child) << std::endl;
+      
+      // Find the original SgInitializedName for the child.
+      for (SgDeclarationStatement* cand : classDef->get_members())
+      {
+        if (SgVariableDeclaration* dcl = isSgVariableDeclaration(cand))
+        {
+          for (SgInitializedName* var : dcl->get_variables())
+          {
+            if (var->get_name() == child->get_name())
+            {
+              decl = var;
+              break;
+            }
+          }
+        }
+      }
+
+      if (!decl) {
+        LOG(INFO) << "Could not find the original SgInitializedName for " << NPrint::p(child) << std::endl;
+        continue;
+      }
+
+      // Convert the decl to a proper AType.
+      AType aDecl(decl);
+
+      // Make sure the associated attribute exists in attributeData.
+      bool success =
+          IA<C>::attributeData
+              .emplace(aDecl, std::move(Attribute<C>(aDecl, owningClass)))
+              .second;
+      if (!success)
+        LOG(DEBUG) << aDecl
+                  << " already in attributeData. Likely inserted preemptively "
+                      "by HandleSgAdaRenamingDecl(). This is not a problem."
+                  << std::endl;
+
+      // Associate it with the calling method.
+      success =
+          owningMethod.attributes.emplace(aDecl, &IA<C>::attributeData.at(aDecl))
+              .second;
+      if (!success)
+        LOG(DEBUG) << "attribute " << aDecl << " already in method "
+                  << owningMethod << std::endl;
+
+      LOG(DEBUG) << IA<C>::printAttributeData() << std::endl;
+    }
+
+    return IA<C>(ia);
+  }
+
  public:
   IA<C> evaluateInheritedAttribute(SgNode* n, IA<C> ia) {
     if (MType m = is<MType>(n)) {
@@ -1252,9 +1413,15 @@ class VisitorTraversal : public AstTopDownProcessing<IA<C>> {
     } else if (SgFunctionRefExp* fre = is<SgFunctionRefExp>(n)) {
       LOG(INFO) << "Handling SgFunctionRefExp " << NPrint::p(vre) << std::endl;
       return HandleSgFunctionRefExp(fre, ia);
+    } else if (SgMemberFunctionRefExp *mfre = is<SgMemberFunctionRefExp>(n)) {
+      LOG(INFO) << "Handling SgMemberFunctionRefExp " << NPrint::p(mfre) << std::endl;
+      return HandleSgMemberFunctionRefExp(mfre, ia);
     } else if (SgExpression* e = is<SgExpression>(n)) {
       LOG(INFO) << "Handling SgExpression " << NPrint::p(e) << std::endl;
       return HandleExpression(e, ia);
+    } else if (SgCtorInitializerList* cil = is<SgCtorInitializerList>(n)) {
+      LOG(INFO) << "Handling SgCtorInitializerList " << NPrint::p(cil) << std::endl;
+      return HandleSgCtorInitializerList(cil, ia);
     }
     return IA<C>(ia);
   }
@@ -1262,6 +1429,97 @@ class VisitorTraversal : public AstTopDownProcessing<IA<C>> {
 
 template <typename C>
 class RenamingTraversal : public AstTopDownProcessing<IA<C>> {
+  // This method searches for the root SgVarRefExp associated with a C++ reference
+  // The logic here is seperated from GetRootExp because we only want to to this
+  // in the renaming traversal to populate the alias map. 
+  static SgExpression* GetRefToVar(SgExpression* exp) {
+    if (!exp) return nullptr;
+
+    if (SgVarRefExp* vre = is<SgVarRefExp>(exp)) {
+      SgInitializedName *var = vre->get_symbol()->get_declaration();
+      // Traverse a chain of references, if neccesary
+      // Ex. int &j = i; int &k = j; int &l = k;
+      if (SageInterface::isReferenceType(var->get_type())) {
+        return GetRefToVar(var->get_initializer());
+      }
+      return vre;
+    }
+    if (SgMemberFunctionRefExp* mf = is<SgMemberFunctionRefExp>(exp)) {
+      return mf;
+    }
+
+    // TODO: Is it safe to move these two up to GetRootExp()? 
+    if (SgAssignInitializer* ai = is<SgAssignInitializer>(exp)) {
+      return GetRefToVar(ai->get_operand());
+    }
+    if (SgArrowExp* ae = is<SgArrowExp>(exp)) {
+      return GetRefToVar(ae->get_rhs_operand());
+    }
+
+    // Attempt to rely on GetRootExp to handle the rest of the unwrapping.
+    if (exp != GetRootExp(exp).back()) {
+      return GetRefToVar(GetRootExp(exp).back());
+    }
+
+    // No reference could be found
+    return nullptr;
+  }
+
+  static IA<C> HandleVariableReference(SgInitializedName*& initId, SgVarRefExp *refToVar, IA<C>& ia) {
+    // Convert the expression to a proper AType.
+    AType a = AType(std::vector<SgExpression*>{refToVar});
+
+    // If the attribute is not in attributeData, we need to add it
+    // TODO: This code is copied from above. Refactor.
+    if (IA<C>::attributeData.count(a) == 0) {
+      // Get the owning class for varId.
+      const C owningClassId = GetScope<C>(refToVar);
+      if (owningClassId == nullptr) {
+        LOG(DEBUG) << NPrint::p(refToVar)
+                  << " has no owning class, so its reference by "
+                  << NPrint::p(initId) << " is ignored" << std::endl;
+        return IA<C>(ia);
+      }
+      // The class should already be in the map. If not, add it.
+      if (!IA<C>::classData.count(owningClassId)) {
+        LOG(TRACE) << "Class " << NPrint::p(owningClassId)
+                  << " missing from classData map. " << IA<C>::printClassData()
+                  << ". Inserting..." << std::endl;
+        IA<C>::classData.emplace(
+            owningClassId, std::move(Class<C>(owningClassId, sourceFile)));
+        LOG(TRACE) << IA<C>::printClassData() << std::endl;
+      }
+      Class<C>& owningClass = IA<C>::classData.at(owningClassId);
+
+      // Emplace the attribute.
+      bool success = IA<C>::attributeData
+                        .emplace(a, std::move(Attribute<C>(a, owningClass)))
+                        .second;
+      if (!success) {
+        LOG(FATAL) << "Failed to emplace attribute " << a
+                  << " into attributeData " << IA<C>::printAttributeData()
+                  << std::endl;
+      }
+    }
+
+    // Store the relationship in the alias map for later use.
+    IA<C>::attributeAliasMap.emplace(initId, a);
+    LOG(INFO) << "Added alias pair <" << NPrint::p(initId) << "," << a << ">" << std::endl;
+    return IA<C>(ia);
+  }
+
+  static IA<C> HandleMethodReference(SgInitializedName*& initId, SgMemberFunctionRefExp *refToMethod, IA<C>& ia) {
+    // Get the declaration associated with the root expression.
+    MType decl = is<MType>(refToMethod->get_symbol()->get_declaration());
+
+    // Store the relationship in the alias map using the SgInitializedName as the key.
+    // This is because c-style method references are an SgVariableDeclaration, not an SgFunctionDeclaration.
+    IA<C>::cStyleMethodAliasMap.emplace(initId, decl).second;
+    LOG(INFO) << "Added alias pair <" << NPrint::p(initId) << "," << NPrint::p(decl) << ">" << std::endl;
+
+    return IA<C>(ia);
+  }
+
   static IA<C> HandleSourceFile(SgSourceFile*& id, IA<C>& ia) {
     sourceFile = id->get_sourceFileNameWithPath();
     // Hash the path to anonymize it.
@@ -1289,7 +1547,7 @@ class RenamingTraversal : public AstTopDownProcessing<IA<C>> {
     // TODO: Ensure the class is within the currently analyzed file?
 
     IA<C>::classData.emplace(c, std::move(Class<C>(c, sourceFile)));
-    LOG(DEBUG) << IA<C>::printClassData() << std::endl;
+    LOG(TRACE) << IA<C>::printClassData() << std::endl;
     return IA<C>(ia);
   }
   static IA<C> HandleSgAdaRenamingDecl(SgAdaRenamingDecl*& renameId,
@@ -1342,12 +1600,12 @@ class RenamingTraversal : public AstTopDownProcessing<IA<C>> {
       }
       // The class should already be in the map.
       if (!IA<C>::classData.count(owningClassId)) {
-        LOG(INFO) << "Class " << NPrint::p(owningClassId)
+        LOG(TRACE) << "Class " << NPrint::p(owningClassId)
                   << " missing from classData map. " << IA<C>::printClassData()
                   << ". Inserting..." << std::endl;
         IA<C>::classData.emplace(
             owningClassId, std::move(Class<C>(owningClassId, sourceFile)));
-        LOG(DEBUG) << IA<C>::printClassData() << std::endl;
+        LOG(TRACE) << IA<C>::printClassData() << std::endl;
       }
       Class<C>& owningClass = IA<C>::classData.at(owningClassId);
 
@@ -1367,17 +1625,47 @@ class RenamingTraversal : public AstTopDownProcessing<IA<C>> {
     return IA<C>(ia);
   }
 
+  // Check if the SgInitializedName is a reference, and if so, add it to the proper alias map.
+  static IA<C> HandleSgInitializedName(SgInitializedName*& initId, IA<C>& ia) {
+    // If this type is a reference, add the referenced value to the alias map.
+    if (SageInterface::isReferenceType(initId->get_type())) {
+      LOG(TRACE) << "Found reference type " << NPrint::p(initId) << std::endl;
+      
+      SgExpression* refToVar = GetRefToVar(initId->get_initializer());
+
+      if (SgVarRefExp *vre = is<SgVarRefExp>(refToVar)) {
+        LOG(DEBUG) << "Found reference to variable " << NPrint::p(vre) << std::endl;
+        return HandleVariableReference(initId, vre, ia);
+      } else if (SgMemberFunctionRefExp *mfre = is<SgMemberFunctionRefExp>(refToVar)) {
+        LOG(DEBUG) << "Found reference to member function " << NPrint::p(mfre) << std::endl;
+        return HandleMethodReference(initId, mfre, ia);
+      } else {
+        LOG(DEBUG) << "Could not find reference to variable for " << NPrint::p(initId) << std::endl;
+        return IA<C>(ia);
+      }
+    }
+    return IA<C>(ia);
+  }
+              
  public:
+  // This method is called for each node visited during the AST traversal. 
+  // The return value (IA) computed here is the input value to this function at all child nodes
   IA<C> evaluateInheritedAttribute(SgNode* n, IA<C> ia) {
     if (SgSourceFile* sf = is<SgSourceFile>(n)) {
       LOG(INFO) << "Handling SgSourceFile " << NPrint::p(sf) << std::endl;
       return HandleSourceFile(sf, ia);
     } else if (C c = is<C>(n)) {
+      if (SgNamespaceDeclarationStatement* ns = is<SgNamespaceDeclarationStatement*>(n)) {
+        c = is<C>(ns->get_firstNondefiningDeclaration());
+      }
       LOG(INFO) << "Handling C " << NPrint::p(c) << std::endl;
       return HandleClass(c, ia);
     } else if (SgAdaRenamingDecl* ard = is<SgAdaRenamingDecl>(n)) {
       LOG(INFO) << "Handling SgAdaRenamingDecl " << NPrint::p(ard) << std::endl;
       return HandleSgAdaRenamingDecl(ard, ia);
+    } else if (SgInitializedName* in = is<SgInitializedName>(n)) {
+      LOG(INFO) << "Handling SgInitializedName " << NPrint::p(in) << std::endl;
+      return HandleSgInitializedName(in, ia);
     }
     return IA<C>(ia);
   }
@@ -1400,10 +1688,12 @@ const std::vector<LCOM::Class<C, MType, AType>> GetClassData(
   IA<C> ia = IA<C>();
 
   // Start by finding attribute renamings in a first pass.
+  LOG(INFO) << "Starting renaming traversal." << std::endl;
   RenamingTraversal<C> rTraversal;
   rTraversal.traverseInputFiles(project, ia);
 
   // Now perform the main traversal.
+  LOG(INFO) << "Starting visitor traversal." << std::endl;
   VisitorTraversal<C> vTraversal;
   vTraversal.traverseInputFiles(project, ia);
 
