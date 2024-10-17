@@ -98,6 +98,21 @@ std::string print(const SgNode* n) {
   return ss.str();
 }
 
+std::string simple_name(const SgNode* n) {
+  if (n == nullptr) return "<null>";
+
+  std::stringstream ss;
+
+  if (anonymous)
+  {
+    ss << n;
+    return ss.str();
+  }
+
+  return sg::dispatch(NPrint{}, n);
+}
+
+
 #define p(n) print(n)
 
 }  // namespace NPrint

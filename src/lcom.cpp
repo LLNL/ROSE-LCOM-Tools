@@ -109,8 +109,28 @@ std::tuple<std::vector<std::string>, Settings> parseArgs(
   return std::make_tuple(cmdline.unparsedArgs(), settings);
 }
 
+/*
+std::string sourceLocation(const SgNode*, const std::string& alt)
+{
+  return alt;
+}
+
+std::string sourceLocation(const SgLocatedNode* n, const std::string& alt)
+{
+  if (n == nullptr) return alt;
+
+  const Sg_File_Info* fi = n->get_file_info();
+  if (fi == nullptr) return alt;
+
+  return fi->get_filenameString();
+}
+*/
+
+bool specHasBody(const SgNode*) { return true; }
+bool specHasBody(const SgAdaPackageSpec* spec) { return spec->get_body() != nullptr; }
+
 template <typename C>
-std::string ProcessLCOM(SgProject*& project) {
+std::string ProcessLCOM(SgProject* project) {
   std::stringstream ss;
   const std::vector<LCOM::Class<C, Method, Attribute>> LCOMInput =
       Traverse::GetClassData<C>(project);
@@ -118,11 +138,17 @@ std::string ProcessLCOM(SgProject*& project) {
   for (const auto& LCOMClass : LCOMInput) {
     std::string className = "null";
     boost::filesystem::path sourceFile = Traverse::sourceFile;
-    if (is<C>(LCOMClass.GetId())) {
+
+    // true, iff package spec & body were available or !package
+    bool hasBody = true;
+    if (C elem = is<C>(LCOMClass.GetId())) {
       Traverse::Class<C>& classObj =
           Traverse::IA<C>::classData.at(LCOMClass.GetId());
-      className = NPrint::p(classObj.GetId());
+      className = NPrint::simple_name(classObj.GetId());
+      //~ className = NPrint::p(classObj.GetId());
+      //~ sourceFile = sourceLocation(elem, classObj.sourceFile);
       sourceFile = classObj.sourceFile;
+      hasBody = specHasBody(elem);
     }
     std::cout << "Class: " << className << std::endl;
     LCOM::LCOM1Data data1;
@@ -147,6 +173,9 @@ std::string ProcessLCOM(SgProject*& project) {
     // NOTE: Normalized LCOM4 is basically YALCOM without special 0 and 1 cases.
     // https://www.tusharma.in/yalcom-yet-another-lcom-metric.html
     std::cout << "LCOM4Norm: " << (double)lcom4 / (double)data5.k << std::endl;
+
+    // PP: reporting LCOM on a spec w/o function bodies may not be very meaningful.
+    if (!hasBody) continue;
 
     // Generate a line of CSV.
     ss << sourceFile << ",\"" << className << "\",\"" << typeid(C).name()
