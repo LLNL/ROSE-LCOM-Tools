@@ -42,6 +42,7 @@ enum class ClassType {
   Function,
   Class,
   ProtectedObject,
+  Namespace,
   All
 };
 std::ostream& operator<<(std::ostream& os, const ClassType& c) {
@@ -61,6 +62,9 @@ std::ostream& operator<<(std::ostream& os, const ClassType& c) {
     case ClassType::ProtectedObject:
       os << "ProtectedObject";
       break;
+    case ClassType::Namespace:
+      os << "Namespace";
+      break;
     case ClassType::All:
       os << "All";
       break;
@@ -73,6 +77,8 @@ std::ostream& operator<<(std::ostream& os, const ClassType& c) {
 // Global options set via command line.
 AixLog::Severity debug = AixLog::Severity::fatal;
 bool anonymous = false;
+bool filterUndefinedMethods = false;
+bool filterCtorsDtors = false;
 DotBehavior dotBehavior = DotBehavior::LeftOnly;
 
 #endif  // DEFINE_HPP
