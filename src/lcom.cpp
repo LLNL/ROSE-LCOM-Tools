@@ -3,6 +3,7 @@
 
 #include <Rose/CommandLine.h>
 #include <Sawyer/CommandLine.h>
+#include "sageInterface.h"
 
 #include <boost/filesystem.hpp>
 #include <cassert>
@@ -15,6 +16,8 @@
 #include "define.hpp"
 #include "lcom.hpp"
 #include "traverse.hpp"
+
+namespace si = SageInterface;
 
 // using Class = SgAdaPackageSpec*;
 using Method = Traverse::MType;
@@ -136,7 +139,7 @@ std::string sourceLocation(const SgLocatedNode* n, const std::string& alt)
 */
 
 bool specHasBody(const SgNode*) { return true; }
-bool specHasBody(const SgAdaPackageSpec* spec) { return spec->get_body() != nullptr; }
+bool specHasBody(const SgAdaPackageSpec* spec) { return si::Ada::getBodyDefinition(spec) != nullptr; }
 
 template <typename C>
 std::string ProcessLCOM(SgProject* project) {
