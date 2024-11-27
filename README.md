@@ -322,7 +322,7 @@ Additional, normalized metrics are computing by taking the LCOM metric divided b
 
 #### LCOM definitions, in plain English
 
-- [LCOM1](https://dl.acm.org/doi/10.1109/32.295895): The number of pairs of methods that do not share attributes.
+- [LCOM1](https://dl.acm.org/doi/10.1145/117954.117970): The number of pairs of methods that do not share attributes.
 - [LCOM2](https://dl.acm.org/doi/10.1109/32.295895): The number of pairs of methods that do not share attributes minus the number of pairs of methods that do share attributes.
 - [LCOM3](https://www.sciencedirect.com/science/article/pii/016412129390077B): The number of connected components in the graph that represents each method as a node and the sharing of at least one attribute as an edge.
 - [LCOM4](https://ieeexplore.ieee.org/document/491650): The number of connected components in the graph that represents each method as a node and the sharing of at least one attribute as an edge. Edges between methods also form when one method calls another within the same class.
