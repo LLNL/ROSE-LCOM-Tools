@@ -139,8 +139,7 @@ Build [ROSE](https://github.com/rose-compiler/rose) with Ada language support wi
 **NOTE**: The Ada representation in ROSE is not yet finalized, so incompatibilities with newer versions of ROSE may be possible. Our tool is confirmed to work with ROSE version `0.11.145.3`.
 
 ```bash
-mkdir -p $ROSE_REPO
-git -C $ROSE_REPO --depth 1 https://github.com/rose-compiler/rose.git .
+git clone --depth 1 https://github.com/rose-compiler/rose.git $ROSE_REPO
 cd $ROSE_REPO
 ./build
 mkdir -p build_tree
@@ -155,15 +154,14 @@ pushd exampleTranslators
 make -j$(nproc)
 popd
 popd
-# NOTE: You may need to restart your terminal after this to clear the changes to LD_LIBRARY_PATH. Adding GNAT to the path adds out-of-date libraries as well, and may throw errors when running certain commands. However, it is required for the build process.
+# NOTE: Restart your terminal after this to clear the changes to LD_LIBRARY_PATH. Adding GNAT to the path adds out-of-date libraries as well, and may throw errors when running certain commands. However, it is required for the build process.
 ```
 
 ### Setting up Google Tests Parallel Script
 This is used by [`allTest.py`](script/allTest.py) to run all test cases in parallel.
 
 ```bash
-mkdir -p $GTEST_REPO
-git -C $GTEST_REPO --depth 1 https://github.com/google/gtest-parallel.git .
+git clone --depth 1 https://github.com/google/gtest-parallel.git $GTEST_REPO
 ```
 
 ## Building and testing the tool
@@ -172,8 +170,7 @@ The recommended process uses [`cmake`](CMakeLists.txt). A [`Makefile`](Makefile)
 
 Start by cloning the repo such that it is in the location specified by `$LCOM_HOME`
 ```bash
-mkdir -p $LCOM_HOME
-git -C $LCOM_HOME --depth 1 https://github.com/LLNL/ROSE-LCOM-Tools.git .
+git clone --depth 1 https://github.com/LLNL/ROSE-LCOM-Tools.git $LCOM_HOME
 cd $LCOM_HOME
 ```
 
@@ -401,15 +398,28 @@ LCOM could be integrated into this tool to color-code methods by LCOM and displa
 
 ## Related works and resources
 
+### Learning materials
+
+- [LCOM Lecture Slides](https://www.ece.rutgers.edu/~marsic/books/SE/instructor/slides/lec-16%20Metrics-Cohesion.ppt) ([archive.org backup](http://web.archive.org/web/20220307222105/https://www.ece.rutgers.edu/~marsic/books/SE/instructor/slides/lec-16%20Metrics-Cohesion.ppt)): Definition of LCOM with visuals and comparisons
+- [Cohesion metrics](https://www.aivosto.com/project/help/pm-oo-cohesion.html): Description of LCOM
 - [Class Cohesion Metrics for Software Engineering: A Critical Review](https://www.math.md/files/csjm/v25-n1/v25-n1-(pp44-74).pdf): Overview of cohesion state of the art
 - [Refactoring Effect on Cohesion Metrics](https://ieeexplore.ieee.org/abstract/document/5328998): Evaluation of how effective cohesion methods are as refactoring aids
-- [LCOM Lecture Slides](https://www.ece.rutgers.edu/~marsic/books/SE/instructor/slides/lec-16%20Metrics-Cohesion.ppt): [archive.org backup](http://web.archive.org/web/20220307222105/https://www.ece.rutgers.edu/~marsic/books/SE/instructor/slides/lec-16%20Metrics-Cohesion.ppt)
-- [Cohesion metrics](https://www.aivosto.com/project/help/pm-oo-cohesion.html): Description of LCOM
+
+### Evaluated tools
+
 - [YALCOM](https://www.tusharma.in/yalcom-yet-another-lcom-metric.html): Yet Another LCOM Metric
 - [LCOM](https://github.com/tushartushar/LCOM): Java LCOM implementation
 - [jpeek](https://github.com/cqfn/jpeek): Alternative Java LCOM implementation
 - [lcom](https://github.com/potfur/lcom): Python-based LCOM implementation
 - [LCOM4go](https://github.com/yahoojapan/lcom4go): Golang-based LCOM4 implementation
+
+### Additional tools (untested)
+- JavaScript: https://github.com/FujiHaruka/eslint-plugin-lcom
+- C#: https://github.com/teo-tsirpanis/lcom-calculator
+- PHP: https://github.com/phpmetrics/PhpMetrics/blob/master/doc/metrics.md
+- Java: https://github.com/rodhilton/jasome/blob/master/src/main/java/org/jasome/metrics/calculators/LackOfCohesionMethodsCalculator.java
+- Java: https://github.com/imgios/DARTS/blob/main/src/main/testSmellDetection/structuralRules/LackOfCohesionOfTestSmellStructural.java
+- Java: https://github.com/mauricioaniche/ck
 
 # Other LCOM tools
 
@@ -462,14 +472,6 @@ Running:
 ```bash
 ~/.local/bin/lcom testcases/paper
 ```
-
-## Additional tools (untested)
-- JavaScript: https://github.com/FujiHaruka/eslint-plugin-lcom
-- C#: https://github.com/teo-tsirpanis/lcom-calculator
-- PHP: https://github.com/phpmetrics/PhpMetrics/blob/master/doc/metrics.md
-- Java: https://github.com/rodhilton/jasome/blob/master/src/main/java/org/jasome/metrics/calculators/LackOfCohesionMethodsCalculator.java
-- Java: https://github.com/imgios/DARTS/blob/main/src/main/testSmellDetection/structuralRules/LackOfCohesionOfTestSmellStructural.java
-- Java: https://github.com/mauricioaniche/ck
 
 ## Running all competing tools
 

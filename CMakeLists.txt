@@ -20,9 +20,9 @@ find_package(Boost REQUIRED COMPONENTS
 
 include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}/include
-  # NOTE: ENV Not working here for some reason.
-  # You must manually specify the path for cmake to work, for now.
-  # $ENV{ROSE_HOME}/include/rose
+  # NOTE: ENV Not working here in Docker.
+  $ENV{ROSE_HOME}/include/rose
+  # You must manually specify the path for cmake to work in Docker.
   /rose/install_tree/include/rose
   $ENV{BOOST_HOME}/include/boost
 )
