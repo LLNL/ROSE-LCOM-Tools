@@ -121,7 +121,7 @@ rm asis.tar.gz
 ### Building BOOST
 Build and install [BOOST](https://www.boost.org/) using the GNAT compiler.
 ```bash
-wget https://boostorg.jfrog.io/artifactory/main/release/1.83.0/source/boost_1_83_0.tar.bz2
+wget https://archives.boost.io/release/1.83.0/source/boost_1_83_0.tar.bz2
 tar -xvf boost_1_83_0.tar.bz2
 pushd $BOOST_REPO
 mkdir -p tools/build/src/

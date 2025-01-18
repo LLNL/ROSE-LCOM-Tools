@@ -37,7 +37,7 @@ ENV BOOST_HOME="/boost_1_83_0/install"
 ENV BOOST_ROOT="$BOOST_HOME"
 ENV LD_LIBRARY_PATH="$BOOST_HOME/stage/lib":$LD_LIBRARY_PATH
 ENV BOOST_LIB="$BOOST_HOME/stage/libexport"
-ADD https://boostorg.jfrog.io/artifactory/main/release/1.83.0/source/boost_1_83_0.tar.bz2 /
+ADD https://archives.boost.io/release/1.83.0/source/boost_1_83_0.tar.bz2 /
 RUN tar -xvf boost_1_83_0.tar.bz2
 WORKDIR /boost_1_83_0
 RUN mkdir -p tools/build/src/
