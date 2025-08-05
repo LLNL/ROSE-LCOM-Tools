@@ -269,6 +269,24 @@ Run `bash allTest.sh` to run tests.
 Multiple tasks, each separated by a space, can be selected to run in one test.
 If no task is specified, all of them will run.
 
+### Replacing the compiler
+
+The ROSE compiler tool is designed to accept source code files using the same syntax as a traditional compiler.
+As a result, we can replace the existing compiler used in a codebase's build system with a call to our LCOM tool instead.
+This enables fairly generalized support for existing projects in a variety of build systems such as `make` and `cmake`.
+
+To accomplish this, we provide a wrapper script, [gcc_replace.sh](LLNL/ROSE-LCOM-Tools/script/gcc_replace.sh), that can be used in lieu of a standard compiler.
+It will still call `g++` under the hood, but it will additionally call the LCOM tool on the side to generate LCOM metrics reports.
+Reports for each source file are placed by default next to each, as a `csv` file.
+
+Example usage for a `cmake` project:
+
+```bash
+# cd "$LCOM_HOME/testcases/<project-to-analyze>"
+# cmake -DCMAKE_CXX_COMPILER="$LCOM_HOME/script/gcc_replace.sh" -S . -B build
+# cmake --build build --parallel $(nproc)
+```
+
 ## High-level code overview
 
 ### [AST Traversal](include/traverse.hpp)
@@ -314,16 +332,35 @@ To find overlapping method accesses, traverse up from each leaf node to the root
 
 ### [LCOM](include/lcom.hpp)
 
-Once the ROSE AST has been traversed and the relationships between classes, methods, and attributes is captured, LCOM1-5 are calculated using the standard approaches [outlined here](https://www.ece.rutgers.edu/~marsic/books/SE/instructor/slides/lec-16%20Metrics-Cohesion.ppt).
+Once the ROSE AST has been traversed and the relationships between classes, methods, and attributes is captured, LCOM1-5 are calculated using the standard approaches [outlined here](http://web.archive.org/web/20220307222105/https://www.ece.rutgers.edu/~marsic/books/SE/instructor/slides/lec-16%20Metrics-Cohesion.ppt).
 Additional, normalized metrics are computing by taking the LCOM metric divided by lowest possible cohesion for a class with the given number of methods, where 1 is least cohesive and 1/#methods is the most cohesive.
 
 #### LCOM definitions, in plain English
 
-- [LCOM1](https://dl.acm.org/doi/10.1145/117954.117970): The number of pairs of methods that do not share attributes.
-- [LCOM2](https://dl.acm.org/doi/10.1109/32.295895): The number of pairs of methods that do not share attributes minus the number of pairs of methods that do share attributes.
-- [LCOM3](https://www.sciencedirect.com/science/article/pii/016412129390077B): The number of connected components in the graph that represents each method as a node and the sharing of at least one attribute as an edge.
-- [LCOM4](https://ieeexplore.ieee.org/document/491650): The number of connected components in the graph that represents each method as a node and the sharing of at least one attribute as an edge. Edges between methods also form when one method calls another within the same class.
-- LCOM5: The sum of non-module attributes accessed by a class, defined by the formula `(a-k*l)/(l-k*l)`, where `a` is the number of attribute accesses, `l` is the number of attributes, and `k` is the number of methods.
+- [LCOM1](https://doi.org/10.1145/118014.117970):
+Computes cohesion in terms of pairwise accesses.
+The number of method pairs that share no attribute accesses and thus may be unrelated to the rest of the class.
+- [LCOM2](https://doi.org/10.1109/32.295895):
+Computes cohesion in terms of pairwise accesses.
+The number of method pairs that share no attribute accesses minus the number of pairs of methods that do share attributes.
+This approach is simillar to LCOM1, but it better rewards classes with lots of cohesive methods even if some are still unrelated.
+- [LCOM3](https://doi.org/10.1016/0164-1212(93)90077-B):
+Uses a graph representation.
+Counts the number of disjoint graphs, where methods are nodes and edges form via shared attribute accesses.
+The high-level idea is that LCOM3 explicitly identifies the number of method groups that could be separated into distinct classes.
+- [LCOM4](https://doi.org/10.1109/32.491650):
+Uses a graph representation.
+Counts the number of disjoint graphs, where methods are nodes and edges form via shared attribute accesses and between a method that calls another method.
+The high-level idea is that LCOM4 explicitly identifies the number of method groups that could be separated into distinct classes.
+Unlike LCOM3, it also recognizes that the methods that call one another form a dependency that may be hard to split.
+- LCOM5:
+Represents cohesion in terms of the proportion of attributes shared between methods, using the formula `(a-k*l)/(l-k*l)`, where `a` is the number of attribute accesses, `l` is the number of attributes, and `k` is the number of methods.
+At a high-level, the numerator represents the difference between the maximum number of unique attribute accesses possible (the case where every method uses every attribute) and the actual number of attribute accesses.
+The denominator normalizes the value to a range between 0 (where the actual accesses includes all possible accesses) and 1 (where each attribute is only accessed once and thus is never shared between methods).
+- [YALCOM](https://doi.org/10.48550/arXiv.2012.12324):
+A normalized form of LCOM4, dividing LCOM4 by the number of methods in the class, `k` to ensure a cohesiveness between 0 and 1.
+It additionally distinguishes between a fully cohesive class (0) and a class with no methods (-1).
+
 
 ### Ada - What is a class?
 
