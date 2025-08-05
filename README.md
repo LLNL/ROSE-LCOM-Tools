@@ -4,7 +4,7 @@
 
 LCOM Metric Analyzer is a tool that evaluates the quality of object-oriented code by identifying classes that lack cohesion.
 These classes can be broken down into smaller, more manageable units for improved clarity and maintenance.
-Cohesion is measured using the various LCOM (Lack of Cohesion of Methods) metrics, and source code is processed using the [ROSE compiler infrastructure](http://rosecompiler.org/).
+Cohesion is measured using the various [LCOM (Lack of Cohesion of Methods) metrics](#lcom-definitions-in-plain-english), and source code is processed using the [ROSE compiler infrastructure](http://rosecompiler.org/).
 
 ## Example
 
@@ -339,10 +339,10 @@ Additional, normalized metrics are computing by taking the LCOM metric divided b
 
 - [LCOM1](https://doi.org/10.1145/118014.117970):
 Computes cohesion in terms of pairwise accesses.
-The number of method pairs that share no attribute accesses and thus may be unrelated to the rest of the class.
+Counts the number of method pairs that share no attribute accesses and thus may be unrelated to the rest of the class.
 - [LCOM2](https://doi.org/10.1109/32.295895):
 Computes cohesion in terms of pairwise accesses.
-The number of method pairs that share no attribute accesses minus the number of pairs of methods that do share attributes.
+Counts the number of method pairs that share no attribute accesses minus the number of pairs of methods that do share attributes.
 This approach is simillar to LCOM1, but it better rewards classes with lots of cohesive methods even if some are still unrelated.
 - [LCOM3](https://doi.org/10.1016/0164-1212(93)90077-B):
 Uses a graph representation.
